@@ -1,7 +1,7 @@
 param(
     [string]$Base,
     [string]$Head,
-    [bool]$PullRequest = $false
+    [string]$PullRequest = "false"
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,7 +12,7 @@ if ($LASTEXITCODE -ne 0 -or -not $repoRoot) {
 
 Set-Location -LiteralPath $repoRoot
 if ($Base -and $Head) {
-    $separator = if ($PullRequest) { "..." } else { ".." }
+    $separator = if ($PullRequest -eq "true") { "..." } else { ".." }
     $range = "$Base$separator$Head"
     $changed = @(& git diff --name-only --diff-filter=ACMR $range -- "*.md")
     if ($LASTEXITCODE -ne 0) {
