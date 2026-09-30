@@ -175,10 +175,10 @@ Tasks:
 - [x] **BASE-01** Verify Git, GitHub CLI, Node/npm, Rust/Cargo and Codex availability. Record exact versions in `docs/development-baseline.md`.
 - [ ] **BASE-02** Install missing Microsoft C++ build tools with Desktop development with C++, a Windows SDK, Rust MSVC toolchain and WebView2. Use Node 22 initially to match upstream CI; pin the validated toolchain after the first successful build.
 - [x] **BASE-03** Install frontend dependencies using `npm ci` and the checked-in lockfile. Keep dependency upgrades separate from the initial port.
-- [ ] **BASE-04** Build/type-check frontend, run the existing Rust tests and record formatting/lint baseline. Existing failures must be identified and fixed or explicitly tracked before unrelated work begins.
+- [x] **BASE-04** Build/type-check frontend, run the existing Rust tests and record formatting/lint baseline. Existing failures must be identified and fixed or explicitly tracked before unrelated work begins.
 - [ ] **BASE-05** Run the native Windows development app locally. Verify tray, hidden/compact/expanded/greeting states, settings, sound, startup toggle and file drop; capture the small fixed-DPI visual/motion reference during that same run. Do not install Claude hooks or enter service keys merely to inspect the baseline UI.
 - [ ] **BASE-06** Build the original installer locally to prove NSIS/toolchain readiness. Treat it as a local baseline artifact, not your distributable app.
-- [ ] **BASE-07** Add Windows PR CI for relevant frontend type/build checks and Rust tests, affected-path selection, dependency caches and superseding outdated runs on the same PR. Record durations and separate fast checks from native/package checks; docs-only paths should use document checks. Later require formatting/clippy after recorded upstream issues are resolved. Release workflow cancellation is separate from PR supersession.
+- [x] **BASE-07** Add Windows PR CI for relevant frontend type/build checks and Rust tests, affected-path selection, dependency caches and superseding outdated runs on the same PR. Record durations and separate fast checks from native/package checks; docs-only paths should use document checks. Later require formatting/clippy after recorded upstream issues are resolved. Release workflow cancellation is separate from PR supersession.
 
 Commands run from your development checkout's `windows` directory during implementation:
 
