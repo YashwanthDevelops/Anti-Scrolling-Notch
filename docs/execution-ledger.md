@@ -50,6 +50,18 @@ Revision checks: 13 master stages, 120 unique task IDs, 13 valid local links acr
 
 Published revision commit: [`c1f42f3c28a253a4b9fca434fb095e60381c2e3e`](https://github.com/YashwanthDevelops/Anti-Scrolling-Notch/commit/c1f42f3c28a253a4b9fca434fb095e60381c2e3e) on `origin/docs/release-scope-and-gates`; `git ls-remote` confirmed the same full SHA. [PR #1](https://github.com/YashwanthDevelops/Anti-Scrolling-Notch/pull/1) contains this bounded documentation packet and the validation report. At this checkpoint the inherited macOS Build workflow was running; no Windows CI result or merged status is claimed. This subsequent ledger commit records the verified publication without embedding its own hash. Final PR/merge state is verified separately in GitHub/session output.
 
+## UI fidelity and efficient validation clarification — 1 October 2026
+
+Documentation packet: `docs/ui-fidelity-and-validation`. Prior merged planning checkpoint: `046d0e9008f7b38b81326aef7d3a777c9b2dec0b` (PR #1).
+
+The user's preference is now explicit: preserve Coucou's island layout, generic animations/transitions and interaction timing while adapting its backend/data to Codex. Exact protected character expressions/animations/icons/sounds are conditional on recorded written permission for a distributed derivative; the asset-license fallback is original replacements without redesigning the surrounding UI. No asset permission is currently recorded.
+
+The plan adds affected-check selection, reusable evidence with code/config/dependency/environment fingerprints, bounded transient retries and diagnosis before rerunning unchanged failures. Broader validation remains required for affected integration boundaries and the actual release package. Stage 2 will add path-scoped/cached Windows CI; inherited workflow files are unchanged by this planning update.
+
+Scope clarification: every audited Coucou feature is accounted for, but service extensions and unverified existing-desktop controls are not promised in the core release. CLI read-only checks found `codex-cli 0.157.1` and App Server tooling; no server, chat, compatibility probe or hook was started/installed. No application build or feature implementation has begun.
+
+Documentation validation passed: 13 master stages, 120 unique task IDs, 13 valid local links, paired code fences, synchronized root mirror and intended-file/whitespace checks. A read-only agent found no scope, asset-permission or evidence-reuse contradictions in the five-file diff. Publication is verified through remote SHA and the PR/session record rather than embedding this commit's own hash.
+
 ## Rules for later entries
 
 Record task IDs, release profile/version, packet, changed files, relevant test results, remaining limitations, branch/commit and push result for every completed milestone. Record a commit hash in the next progress entry rather than trying to embed a commit's own hash into its contents. Split status for tasks spanning profiles and record QA/REL evidence per release. Deferred/not-applicable work needs a reason and must not be marked implemented. Never mark a task complete solely because its source renderer or placeholder exists.

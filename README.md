@@ -21,6 +21,8 @@ The audited Coucou source and its Git history have been imported as the developm
 
 Use Coucou's existing Windows Tauri/Rust/TypeScript shell as the foundation and select inherited behaviors by their usefulness for Codex. Execute the master plan through one bounded stage/PR at a time.
 
+Preserve Coucou's island layout, generic animation/transitions and interaction timing while adapting the data and controls to Codex. Use affected checks and reusable valid evidence during development; broader integration/package validation happens at the relevant boundaries and releases.
+
 The monitor MVP includes the original shell/settings, independent Codex sessions/activity, Git/worktree and GitHub PR/CI monitoring, Windows notifications, basic history and reload/reconnect recovery. Interactive v1 adds managed App Server chat, streaming, actual approvals/questions, interrupt/steer, attachments and detailed history. Other services, voice, shared desktop, hosted webhooks and WSL/ARM64 are selected extensions.
 
 Production capabilities need verified supported-version behavior, tests, failure handling and documented fallback. The Rust backend owns authoritative state; UI reads snapshots and sends typed intent. A screen alone does not complete a feature. Each released profile must pass the plan's QA and delivery gates; the complete core project is the verified interactive v1 release.
@@ -33,6 +35,6 @@ Inherited release scripts, app identities and assets are references until adapte
 
 ## Attribution and assets
 
-Based on [Coucou by Louis Raillé](https://github.com/louis-cfm/coucou), audited at commit 3cc3333203f60f63326ee949b7b86c7549992a1f. Source reuse follows the [MIT license](LICENSE). Coucou/Mochi names, character artwork/expressions/animations, icons, sounds and media have [separate asset restrictions](LICENSE-ASSETS.md). Anti-Scrolling-Notch will use its own identity and assets before distribution.
+Based on [Coucou by Louis Raillé](https://github.com/louis-cfm/coucou), audited at commit 3cc3333203f60f63326ee949b7b86c7549992a1f. Source reuse follows the [MIT license](LICENSE). Coucou/Mochi names, character artwork/expressions/animations, icons, sounds and media have [separate asset restrictions](LICENSE-ASSETS.md). Anti-Scrolling-Notch will use its own identity; exact protected assets require written permission for distribution, otherwise original replacements are required. The surrounding island UI and generic motion remain the visual reference.
 
 This project is independent and is not presented as an official OpenAI or Coucou product.

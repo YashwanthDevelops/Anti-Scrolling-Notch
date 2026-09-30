@@ -14,6 +14,7 @@ Use this template for one bounded stage/PR assignment from the master plan. Save
 | User outcome | One concrete behavior this packet delivers |
 | In scope | Specific behavior, files/modules and schema/config changes |
 | Excluded | Adjacent stages/features, optional services and unsupported controls |
+| Validation selection | Smallest meaningful checks, their input/version fingerprints, reusable prior evidence and triggers for broader checks |
 | Ownership | Coordinator and any agents' non-overlapping files/read-only review tasks |
 
 ## Capability and architecture contract
@@ -34,6 +35,8 @@ State the adapter event/intent types and how they follow backend adapter -> norm
 | Release limitations | Disabled/deferred capabilities, retained risks and exact profile scope |
 
 Do not create meaningless tests for cosmetic or documentation changes. Use relevant interaction/accessibility or document checks and explicitly state why backend/persistence evidence is not applicable. Do not claim a build or runtime check that was not run.
+
+Follow the master plan's validation policy: affected checks during development, broader checks for changed boundaries and the actual release package. Preserve Coucou UI/motion against the small Stage 2 reference when affected. Reuse prior passing evidence only while its relevant inputs/versions remain valid; diagnose failures before repeating identical commands. Do not retest unrelated subsystems after required checks pass.
 
 ## PR and completion gate
 
