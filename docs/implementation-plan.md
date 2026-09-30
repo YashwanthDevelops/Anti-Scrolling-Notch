@@ -172,9 +172,9 @@ After this initial import, future development can simply clone your repository. 
 
 Tasks:
 
-- [ ] **BASE-01** Verify Git, GitHub CLI, Node/npm, Rust/Cargo and Codex availability. Record exact versions in `docs/development-baseline.md`.
+- [x] **BASE-01** Verify Git, GitHub CLI, Node/npm, Rust/Cargo and Codex availability. Record exact versions in `docs/development-baseline.md`.
 - [ ] **BASE-02** Install missing Microsoft C++ build tools with Desktop development with C++, a Windows SDK, Rust MSVC toolchain and WebView2. Use Node 22 initially to match upstream CI; pin the validated toolchain after the first successful build.
-- [ ] **BASE-03** Install frontend dependencies using `npm ci` and the checked-in lockfile. Keep dependency upgrades separate from the initial port.
+- [x] **BASE-03** Install frontend dependencies using `npm ci` and the checked-in lockfile. Keep dependency upgrades separate from the initial port.
 - [ ] **BASE-04** Build/type-check frontend, run the existing Rust tests and record formatting/lint baseline. Existing failures must be identified and fixed or explicitly tracked before unrelated work begins.
 - [ ] **BASE-05** Run the native Windows development app locally. Verify tray, hidden/compact/expanded/greeting states, settings, sound, startup toggle and file drop; capture the small fixed-DPI visual/motion reference during that same run. Do not install Claude hooks or enter service keys merely to inspect the baseline UI.
 - [ ] **BASE-06** Build the original installer locally to prove NSIS/toolchain readiness. Treat it as a local baseline artifact, not your distributable app.

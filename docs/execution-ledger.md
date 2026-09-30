@@ -74,6 +74,18 @@ Updated documents: implementation plan, README, AGENTS.md, packet template, sour
 
 Documentation checks passed: 13 stages, 121 unique task IDs, 13 valid local links, paired code fences, exact supplied wording and intended-file/whitespace checks. A read-only agent approved the six-file diff with no development/release-gate contradictions. No application build or runtime test was run for this documentation update. Publication is verified by remote SHA and the PR/session record.
 
+## Stage 2 Windows baseline packet — partial checkpoint, 1 October 2026
+
+Packet: `docs/work-packets/stage-2-windows-baseline.md` on `work/windows-baseline`; monitor MVP foundation. Scope is BASE-01 through BASE-07 only. Coucou application sources, artwork, animations, sounds and runtime code were not modified.
+
+BASE-01 and BASE-03 are complete. Node v22.23.2/npm 10.9.8 were installed in an isolated user-scoped location and `npm ci` passed in 7.5 seconds with 18 packages and 0 vulnerabilities. Rust stable MSVC 1.98.1/Cargo 1.98.1 were installed in the user profile. The frontend TypeScript check and Vite bundle passed in 2.9 seconds. The exact commands, versions and archive checksums are in `docs/development-baseline.md`.
+
+BASE-02 remains blocked: official Visual Studio Build Tools 2022 v17.14.41 was invoked with the C++ workload, x64 MSVC tools and Windows SDK 26100; the standard Windows elevation flow ended with installer code 1602. `link.exe`, `cl.exe`, `vswhere.exe` and Windows SDK headers remain absent. One `cargo test --workspace --locked` run resolved dependencies and then stopped at `link.exe not found`; no Rust tests executed. `cargo fmt --all -- --check` identifies inherited formatting drift in 11 Rust files. No source reformat was applied. This is a toolchain prerequisite blocker, not a test assertion failure.
+
+Added `.github/workflows/windows-ci.yml` with affected-path selection, separate frontend and locked Rust-test jobs, Node 22 and Cargo lockfile caches, docs-only checks, and PR-scoped stale-run cancellation. Added `docs/check-markdown.ps1` for changed-document link/fence checks. Local whitespace and changed-document validation passed. An initial whole-repository diagnostic also found an existing broken link in untouched `docs/upstream-README.md` to `windows/README.md`; the workflow checks only changed documents so this inherited source-reference issue does not block unrelated documentation edits. BASE-04, BASE-05 and BASE-06 remain partial/pending: native app behavior and the local installer were not verified. BASE-07 awaits workflow syntax inspection and hosted pull-request results. Stage 2 remains pending; Stage 3 was not started.
+
+Changed files: implementation-plan task checkboxes for BASE-01/03, the filled packet, this ledger, the Windows baseline, the scoped CI workflow and its document checker. Local `git diff --check` and changed-document link/fence validation passed; workflow syntax inspection and a hosted PR run are required before the checkpoint can be integrated. Commit/push and remote verification are recorded in the following publication entry.
+
 ## Rules for later entries
 
 Record task IDs, release profile/version, packet, changed files, relevant test results, remaining limitations, branch/commit and push result for every completed milestone. Record a commit hash in the next progress entry rather than trying to embed a commit's own hash into its contents. Split status for tasks spanning profiles and record QA/REL evidence per release. Deferred/not-applicable work needs a reason and must not be marked implemented. Never mark a task complete solely because its source renderer or placeholder exists.
