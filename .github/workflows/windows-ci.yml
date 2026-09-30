@@ -152,5 +152,8 @@ jobs:
           key: windows-cargo-${{ hashFiles('windows/Cargo.lock') }}
           restore-keys: windows-cargo-
 
+      - name: Build the hook resource required by the Tauri build script
+        run: cargo build --release -p coucou-hook
+
       - name: Run locked Rust workspace tests
         run: cargo test --workspace --locked
