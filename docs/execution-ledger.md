@@ -86,7 +86,7 @@ Added .github/workflows/windows-ci.yml with affected-path selection, separate fr
 
 Changed files: implementation-plan task checkboxes for BASE-01/03/04/07, the filled packet, this ledger, the Windows baseline, the scoped CI workflow and its document checker. Local git diff --check and changed-document link/fence validation passed; the final hosted Windows CI run and inherited Build workflow passed at the recorded commit.
 
-Publication verification for the tested code: commit 9e56fe89b4feebc9df5ca4c5c80da1662f5e9e2c was pushed to origin/work/windows-baseline; git ls-remote matched the local SHA. Draft PR #4 targets main. After this progress entry is committed, only that documentation/status commit remains to be pushed; Stage 2 cannot be integrated until the administrator-approved C++/SDK setup and local app/installer checks complete.
+Publication verification: the tested code commit 9e56fe89b4feebc9df5ca4c5c80da1662f5e9e2c and status commit eea0471b17d45d64ed98c2bf1162d62217b50159 are pushed to origin/work/windows-baseline; `git ls-remote` matches the current local SHA. Draft PR #4 targets `main`. A workstation recheck on 1 October 2026 confirmed the isolated Node v22.23.2 binary remains available, while `cl.exe`, `link.exe`, `vswhere.exe`, Windows SDK headers and `makensis.exe` are still absent. BASE-02, BASE-05 and BASE-06 remain pending; Stage 2 cannot be integrated until the administrator-approved C++/SDK setup and local app/installer checks complete.
 
 ## Rules for later entries
 
