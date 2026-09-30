@@ -6,7 +6,7 @@ Repository: [YashwanthDevelops/Anti-Scrolling-Notch](https://github.com/Yashwant
 
 ## Current status
 
-The audited Coucou source and its Git history have been imported as the development baseline. Planning documentation is being published; the Windows build and Codex feature implementation are pending. The inherited application still implements Coucou/Claude behavior. This repository does not yet contain a completed Codex companion.
+The audited Coucou source and its Git history have been imported as the development baseline. The updated plan was published on 1 October 2026; the Windows build and Codex feature implementation are pending. The inherited application still implements Coucou/Claude behavior. This repository does not yet contain a completed Codex companion.
 
 ## Project documentation
 

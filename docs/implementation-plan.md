@@ -1,6 +1,6 @@
 # Anti-Scrolling-Notch — Windows Codex implementation plan
 
-Updated 1 October 2026. This plan replaces the earlier fork-based setup. Source import and planning publication are the first deliverable; application builds and feature implementation remain pending.
+Updated 1 October 2026. This plan replaces the earlier fork-based setup. The audited source and planning baseline have been committed and pushed to your repository; application builds and feature implementation remain pending. Verified initial publication: `47f52e6ce4ea552bda101b0423752b064dbdd5b8` on `main`.
 
 Build from Coucou's existing Windows project. Keep its useful shell and interaction infrastructure, then introduce Codex-specific adapters, reliable session state and GitHub workflow monitoring. This document covers obtaining the project from GitHub, development, complete functional scope, testing, packaging, release and maintenance.
 
@@ -80,7 +80,7 @@ Tasks:
 - [x] **SETUP-02** Clone the audited Coucou source into the separate `app` directory; keep the analysis checkout intact and preserve source history.
 - [x] **SETUP-03** Configure `origin` as Anti-Scrolling-Notch and `upstream` as Coucou. Verify fetch/push URLs; never push to Coucou.
 - [x] **SETUP-04** Inspect the checked-out SHA. Compare it with the audited SHA and record any newer upstream changes before relying on this plan's source findings.
-- [ ] **SETUP-05** Publish the initial source/planning baseline to `main`; create `work/codex-foundation` when implementation starts. Keep unfinished changes on feature branches and use reviewed milestone PRs.
+- [x] **SETUP-05** Publish the initial source/planning baseline to `main`. Create `work/codex-foundation` when implementation starts; keep unfinished changes on feature branches and use reviewed milestone PRs.
 - [x] **SETUP-06** Add the audit, updated plan, source provenance and execution ledger under your project's documentation; retain upstream license and asset-license files.
 - [ ] **SETUP-07** Review inherited Actions workflows and release scripts. Replace upstream repository references before enabling your own publishing workflow. Never push release tags to Coucou.
 - [x] **SETUP-08** Add the Anti-Scrolling-Notch README and coordinating-agent commit/push rules. Preserve the original Coucou README as reference. Keep build output, local logs, files and secrets ignored.
@@ -443,7 +443,7 @@ The root workspace copy of this plan is a convenience mirror. After import, upda
 
 ## Completion checklist
 
-- [ ] Your GitHub repository owns all development and release destinations.
+- [x] Your GitHub repository is the development/publication origin; inherited release scripts must have their destination and branding adapted before product releases.
 - [ ] A clean checkout builds and tests reproducibly.
 - [ ] Own identity/assets are used; MIT attribution is retained.
 - [ ] The Windows island, tray, settings, startup, hotkey and detail panel work.
