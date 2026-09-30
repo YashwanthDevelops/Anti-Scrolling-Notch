@@ -62,6 +62,18 @@ Scope clarification: every audited Coucou feature is accounted for, but service 
 
 Documentation validation passed: 13 master stages, 120 unique task IDs, 13 valid local links, paired code fences, synchronized root mirror and intended-file/whitespace checks. A read-only agent found no scope, asset-permission or evidence-reuse contradictions in the five-file diff. Publication is verified through remote SHA and the PR/session record rather than embedding this commit's own hash.
 
+## Retained Coucou prototype direction — 1 October 2026
+
+Documentation packet: `docs/inherited-ui-prototype`. Prior merged checkpoint: `9abeed3474cdc514de0b8088398bef42e61cc8ff` (PR #2).
+
+The user's latest instruction explicitly supersedes any development-time asset replacement/redesign requirement: initially retain Coucou/Mochi visual assets and animation behavior for development/prototyping as replaceable inherited resources. Preserve the existing UI, character expressions/animations, sounds, layout and timing while integrating Codex. A new UI can be considered later only at the user's request.
+
+SHELL-02 now uses the supplied development-retention wording. A separate REL-11 gate requires explicit asset/license inventory and appropriate rights or original replacements before any public/distributable release, including beta installers, updates and downloadable CI artifacts. No rights are assumed or recorded by this update. Development-stage completion does not depend on producing original art or redesigning the UI.
+
+Updated documents: implementation plan, README, AGENTS.md, packet template, source provenance and this ledger; root plan mirror synchronized. Application code, visuals/assets, licenses and workflows remain unchanged; implementation has not started. Task count becomes 121 with REL-11; the 13 master stages and phased feature scope are unchanged.
+
+Documentation checks passed: 13 stages, 121 unique task IDs, 13 valid local links, paired code fences, exact supplied wording and intended-file/whitespace checks. A read-only agent approved the six-file diff with no development/release-gate contradictions. No application build or runtime test was run for this documentation update. Publication is verified by remote SHA and the PR/session record.
+
 ## Rules for later entries
 
 Record task IDs, release profile/version, packet, changed files, relevant test results, remaining limitations, branch/commit and push result for every completed milestone. Record a commit hash in the next progress entry rather than trying to embed a commit's own hash into its contents. Split status for tasks spanning profiles and record QA/REL evidence per release. Deferred/not-applicable work needs a reason and must not be marked implemented. Never mark a task complete solely because its source renderer or placeholder exists.
