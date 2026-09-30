@@ -19,13 +19,15 @@ The audited Coucou source and its Git history have been imported as the developm
 
 ## Implementation approach
 
-Use the existing Windows Tauri/Rust/TypeScript shell, then add independent Codex session monitoring, managed Codex chat, actual approvals/questions, GitHub PR and CI updates, Windows notifications, process/connection health, and truthful file preparation. Preserve useful optional service integrations.
+Use Coucou's existing Windows Tauri/Rust/TypeScript shell as the foundation and select inherited behaviors by their usefulness for Codex. Execute the master plan through one bounded stage/PR at a time.
 
-Application builds and compatibility probes come before feature claims. Existing desktop control remains capability-gated. The implementation plan specifies each stage's acceptance conditions.
+The monitor MVP includes the original shell/settings, independent Codex sessions/activity, Git/worktree and GitHub PR/CI monitoring, Windows notifications, basic history and reload/reconnect recovery. Interactive v1 adds managed App Server chat, streaming, actual approvals/questions, interrupt/steer, attachments and detailed history. Other services, voice, shared desktop, hosted webhooks and WSL/ARM64 are selected extensions.
+
+Production capabilities need verified supported-version behavior, tests, failure handling and documented fallback. The Rust backend owns authoritative state; UI reads snapshots and sends typed intent. A screen alone does not complete a feature. Each released profile must pass the plan's QA and delivery gates; the complete core project is the verified interactive v1 release.
 
 ## Development and publication
 
-The Windows project is in the windows directory. Read [AGENTS.md](AGENTS.md) and the implementation plan before working. Make small verified commits and push each completed change to this repository. The upstream remote is used to fetch and review Coucou changes; its push URL is disabled in the development checkout.
+The Windows project is in the windows directory. Read [AGENTS.md](AGENTS.md), the implementation plan and [stage packet template](docs/stage-packet-template.md) before working. The next packet is Stage 2 Windows baseline, not feature implementation. Make small verified commits and push each completed change to this repository. The upstream remote is used to fetch and review Coucou changes; its push URL is disabled in the development checkout.
 
 Inherited release scripts, app identities and assets are references until adapted. Do not publish Coucou-branded installers or run an upstream-targeting release script for this product.
 

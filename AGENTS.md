@@ -8,6 +8,16 @@
 - Read the relevant upstream instructions and module code, but follow the user's approved Windows/Codex scope and original product identity. Keep the macOS source as reference unless explicitly assigned work there.
 - Preserve MIT attribution and the separate asset-license notice. Use original product name, app IDs, icon, character and sounds before distributing this product.
 - Do not imply that inherited Claude/Coucou source is already implemented for Codex. Mark capabilities and validation truthfully.
+- Coucou is the foundation, not a mandatory parity specification. Record inherited features as keep/adapt/defer/remove according to their Codex benefit and release profile. Deferred services/controls must remain inactive.
+
+## Bounded execution and completion
+
+- Treat the plan as a master specification. Activate one stage work packet and one bounded implementation PR at a time using `docs/stage-packet-template.md`; review/integrate it before starting the next packet. Split large stages into sequential PRs.
+- Follow Monitor MVP -> interactive v1 -> selected extensions. Stage 9A notifications/recovery belong to MVP and must not depend on Stage 8 managed chat. Optional services/shared desktop/voice/platform extensions do not block core delivery.
+- A production capability needs supported-version evidence, fixture/integration tests, tested failure behavior and documented fallback. Enforce this in backend and UI; unknown/unverified capabilities remain disabled. Demo fixtures do not prove production readiness.
+- Authority flows through backend adapters -> normalized events -> pure Rust reducer -> snapshot/event sequence -> frontend view store -> UI. No direct frontend Codex/GitHub queries, authoritative state or request-resolution decisions. Local drafts/focus/animations are presentation state; IO belongs outside the reducer.
+- A feature requires real backend behavior, failure behavior, persistence/recovery and automated verification. Explain relevant N/A for stateless/presentation-only work; never count a renderer/placeholder as completion.
+- Track task/profile/packet sub-status and repeat Stages 11–12 gates for each release profile/version. The complete core project requires interactive v1 QA and delivery; deferred extensions remain deferred.
 
 ## Commits and pushes
 

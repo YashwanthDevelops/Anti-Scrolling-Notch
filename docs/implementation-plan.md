@@ -1,8 +1,8 @@
 # Anti-Scrolling-Notch — Windows Codex implementation plan
 
-Updated 1 October 2026. This plan replaces the earlier fork-based setup. The audited source and planning baseline have been committed and pushed to your repository; application builds and feature implementation remain pending. Verified initial publication: `47f52e6ce4ea552bda101b0423752b064dbdd5b8` on `main`.
+Updated 1 October 2026. This revision incorporates the supplied execution and release-scope feedback. The audited source and planning baseline have been committed and pushed to your repository; application builds and feature implementation remain pending. Verified planning checkpoint: `60b063f5f184bba236af58b3c0290e0ca3d016ef` on `main`.
 
-Build from Coucou's existing Windows project. Keep its useful shell and interaction infrastructure, then introduce Codex-specific adapters, reliable session state and GitHub workflow monitoring. This document covers obtaining the project from GitHub, development, complete functional scope, testing, packaging, release and maintenance.
+Build from Coucou's existing Windows project. Use it as the implementation/reference foundation for Anti-Scrolling-Notch for Codex. Keep interactions that help Codex users, adapt their behavior to Codex, and remove or defer the rest. This master specification covers source import through maintenance; execute it through one bounded stage/PR at a time.
 
 The earlier [repository audit](coucou-analysis.md) defines 124 catalog entries and identifies working features versus placeholders. The [source inventory](coucou-source-inventory.md) lists all 215 audited files. Audited upstream commit: `3cc3333203f60f63326ee949b7b86c7549992a1f`.
 
@@ -17,18 +17,41 @@ The earlier [repository audit](coucou-analysis.md) defines 124 catalog entries a
 | Git remotes | `origin` = your Anti-Scrolling-Notch repository; `upstream` = Coucou, used only to fetch/review changes. |
 | GitHub CLI | Optional. Git handles clone/commit/push; use GitHub's website or an available authenticated API for PRs/releases. `gh` was unavailable during this plan update. |
 | Delivery policy | Commit each coherent verified change, push every completed commit, and record actual progress/checks in the project ledger. |
+| Execution policy | One active stage packet and one active implementation PR at a time; review and integrate it before starting dependent work. |
 | Agent policy | Agents may work on independent modules; the coordinating agent owns integration, staging, commits and pushes. |
 | Initial platform | Windows 11 x64; additional Windows/ARM64 support only after testing. |
 | App stack | Tauri 2, Rust, TypeScript/Vite, original Canvas avatar, WebView2. |
 | Runtime | Per-user tray app; no Windows service or administrator requirement. |
 | Existing Codex sessions | Trusted hook monitoring; supported controls enabled only after compatibility tests. |
 | Interactive Ask | Companion-managed Codex App Server sessions using stdio. |
-| Existing desktop session control | Experimental adapter only after passive attachment and arbitration are proven. |
+| Existing desktop session control | Optional extension, disabled until passive attachment and arbitration are proven. |
 | Persistent state | Migrated preferences, bounded SQLite event/history data, OS-protected credentials. |
 | GitHub | Read-first PR/review/check monitoring with conditional polling; optional hosted webhooks later. |
 | Branding | Own name, app IDs, avatar, icon and sounds; retain upstream MIT attribution. |
 
-The full release includes the island, live Codex monitoring, managed Codex interactions, GitHub workflow tracking, Windows notifications, process/connection health, file/context handling and optional Coucou integrations. Voice, hosted webhook infrastructure and enterprise cloud orchestration are extensions beyond the core release.
+## Release scopes and inherited-feature decisions
+
+| Release profile | Required user outcome | Required stages |
+|---|---|---|
+| Monitor MVP / first useful release | Original Windows island/tray/settings; trusted existing-session monitoring; independent sessions/agents and activity tickers; Git/worktree detection; GitHub PR/current-head CI; Windows notifications; basic history; reliable reload/reconnect | MVP scope of 1–7, 9A, then 11–12 for the MVP profile |
+| Interactive v1 | All MVP behavior plus managed Codex App Server sessions, streamed chat, actual approvals/questions, interrupt/steer, attachments and detailed history/output | MVP foundation plus 8, 9B, Stage 10 core attachments, then repeat 11–12 for the v1 profile |
+| Optional extensions | Selected n8n/Vercel/Stripe/Resend/Notion/Cal.com integrations, mail sharing/window context, account statistics, resource display, voice, shared-desktop attachment, hosted webhooks, WSL/ARM64 | Separate selected packets after the core release; compatibility and Stages 11–12 gates apply to each shipped extension |
+
+MVP does not depend on managed chat, attachment transport or optional services. Monitor approvals/questions may show a waiting indicator and a verified route back to Codex, but interactive controls remain out of the MVP scope. Hidden or disabled inherited controls must explain the supported alternative where useful. Interactive v1 is the complete core product; deferred extensions do not block it.
+
+Coucou is not a mandatory parity target. Review all 124 audit entries and record **keep / adapt / defer / remove** with the Codex benefit, release profile and task IDs in `docs/inherited-feature-decisions.md` during Stage 4. Keep useful shell, activity and workflow semantics; original character choreography, all 28 sounds, account star statistics and unrelated services are not completion requirements. Deferred source may remain isolated as reference, but it must not expose misleading UI, start networking or run unused background loops in shipped builds.
+
+**Feature completion rule:** a UI is not a completed feature. An in-scope feature needs working backend behavior, defined failure behavior, persistence/recovery behavior and automated verification. A stateless or purely presentational feature must explicitly explain why persistence is not applicable and verify its relevant accessibility/interaction behavior. Screenshots, fixtures without a real adapter, placeholder responses and optimistic success labels cannot satisfy completion.
+
+The project is complete only when Stages 11–12 acceptance criteria pass for the interactive v1 profile. A monitor MVP can be released earlier only after those same QA/delivery gates pass for its declared scope. Record deferred work separately; never check it off as implemented.
+
+## Execute one stage/PR at a time
+
+This document is the master plan, not a single autonomous implementation assignment. Before starting a stage, create a work packet using [the stage packet template](stage-packet-template.md). The packet names its release profile, task IDs, dependencies, allowed files/modules, explicit exclusions, acceptance evidence and fallback/recovery tests. Record it as active in the execution ledger.
+
+Use one short branch and one bounded PR for that packet. A large stage may be split into sequential PRs, each with its own completed behavior and gate; do not start the next packet until the prior PR is reviewed, required checks pass and it is integrated. Independent agents may inspect/test or own non-overlapping parts of the current packet. They do not authorize additional stages or concurrent Git mutations.
+
+The PR must link the packet and show behavior, failure/recovery results, automated checks and remaining limitations. A partially completed stage remains pending in the master plan even when one of its packets merges. Release QA and delivery repeat per profile instead of being postponed until every optional feature exists.
 
 ## Delivery map
 
@@ -36,19 +59,20 @@ The full release includes the island, live Codex monitoring, managed Codex inter
 |---|---|---|
 | 1 | Import Coucou into your existing repository and publish this plan | Existing GitHub repository and Git |
 | 2 | Reproducible upstream Windows baseline | 1 |
-| 3 | Verified Codex/Windows capability contract | 2 |
+| 3 | Hard capability gate for the selected release profile | 2 |
 | 4 | Own product identity and Windows shell | 2, identity decision |
 | 5 | Authoritative broker, storage and request routing | 3, 4 |
 | 6 | Reliable monitoring of existing Codex sessions | 3, 5 |
 | 7 | Useful local Git and GitHub workflow cards | 5, 6 |
 | 8 | Interactive companion-managed Codex sessions | 3, 5, 6 |
-| 9 | Complete Windows notification and process health behavior | 4–8 |
-| 10 | Files, context and remaining integration parity | 5, 8 |
-| 11 | Release candidate verified on Windows | 4–10 |
-| 12 | Signed installer, updater and public release | 11 |
+| 9A | MVP notifications, observer health and recovery | 4–7; no dependency on 8 |
+| 9B | Managed-process/request health and recovery | 8, 9A |
+| 10 | Core attachments for v1; selected extensions separately | 5, 8 for attachments; extension-specific prerequisites |
+| 11 | Release candidate verified for the declared profile | All in-scope packets; MVP excludes 8, 9B and 10 |
+| 12 | Signed installer, updater and release for that profile | 11 for the same profile |
 | 13 | Maintenance and supported-version policy | 12 |
 
-Stages 6–7 produce the first useful monitor. Stages 8–10 complete the interactive product and useful Coucou parity. The project is complete only when Stages 11–12 acceptance criteria pass.
+Stage 9 has two sequential scopes, not two new master stages. Stages 6–7 plus 9A produce the useful monitor; Stages 11–12 make it releasable. After that baseline is integrated, Stage 8, 9B and core Stage 10 build the interactive product, followed by another QA/release cycle. Optional modules are independently selected.
 
 ```mermaid
 flowchart LR
@@ -59,13 +83,13 @@ flowchart LR
     D --> E
     E --> F[Existing-session monitor]
     F --> G[GitHub workflow]
-    E --> H[Managed Codex chat]
-    G --> I[Notifications and health]
-    H --> I
-    H --> J[Files and optional integrations]
-    I --> K[Verification]
-    J --> K
-    K --> L[Signed installer and release]
+    G --> I[9A: MVP notifications and recovery]
+    I --> K[11 and 12: MVP QA and release]
+    K --> H[8: Managed Codex chat]
+    H --> N[9B: Managed process and request recovery]
+    N --> J[10: Core attachments]
+    J --> L[11 and 12: Interactive v1 QA and release]
+    L --> X[Selected extensions and separate release gates]
 ```
 
 ## Stage 1 — Clone Coucou and publish the planning baseline to your repository
@@ -80,7 +104,7 @@ Tasks:
 - [x] **SETUP-02** Clone the audited Coucou source into the separate `app` directory; keep the analysis checkout intact and preserve source history.
 - [x] **SETUP-03** Configure `origin` as Anti-Scrolling-Notch and `upstream` as Coucou. Verify fetch/push URLs; never push to Coucou.
 - [x] **SETUP-04** Inspect the checked-out SHA. Compare it with the audited SHA and record any newer upstream changes before relying on this plan's source findings.
-- [x] **SETUP-05** Publish the initial source/planning baseline to `main`. Create `work/codex-foundation` when implementation starts; keep unfinished changes on feature branches and use reviewed milestone PRs.
+- [x] **SETUP-05** Publish the initial source/planning baseline to `main`. Use `work/windows-baseline` for the first implementation packet; keep unfinished changes on short feature branches and use one reviewed stage PR at a time.
 - [x] **SETUP-06** Add the audit, updated plan, source provenance and execution ledger under your project's documentation; retain upstream license and asset-license files.
 - [ ] **SETUP-07** Review inherited Actions workflows and release scripts. Replace upstream repository references before enabling your own publishing workflow. Never push release tags to Coucou.
 - [x] **SETUP-08** Add the Anti-Scrolling-Notch README and coordinating-agent commit/push rules. Preserve the original Coucou README as reference. Keep build output, local logs, files and secrets ignored.
@@ -158,21 +182,31 @@ The original package scripts stage/build the relay as part of frontend build/dev
 
 **Done when:** a clean checkout produces a running Windows app and installer, baseline behavior is documented, and Windows CI passes the required baseline checks.
 
-## Stage 3 — Prove Codex compatibility before committing to product controls
+## Stage 3 — Enforce the hard capability gate
 
-Create small integration probes and fixtures, using a disposable test repository/session. This stage decides which controls the app may honestly offer.
+Create small integration probes and fixtures, using a disposable test repository/session. This stage decides which production capabilities the app may expose. Complete the monitoring/navigation/Windows probes for MVP first; complete managed-session probes before Stage 8; investigate shared-desktop attachment only as a selected extension.
+
+No capability may be exposed in production UI unless all four conditions hold:
+
+1. It has been verified against a declared supported Codex version and surface; OS/GitHub capabilities also record the tested platform/API contract.
+2. Sanitized fixtures and a runnable automated fixture/integration test exist, with recorded real-adapter integration evidence.
+3. Failure behavior is defined and tested, including timeout, disconnect, cancellation or permission denial where applicable.
+4. A documented fallback is available, such as opening the project/Codex, returning a hook no-decision response, showing cached data or disabling an unavailable control.
+
+Maintain a backend capability registry containing version/surface, transport, evidence/test reference, failure behavior, fallback and enabled state. The UI consumes this registry; it cannot enable a feature on its own. Unknown versions, unsupported surfaces and unverified controls stay disabled/hidden with honest fallback. Re-run affected probes before declaring a new version supported. Development fixture/demo modes are visibly identified and excluded from production readiness evidence.
 
 Tasks:
 
 - [ ] **COMPAT-01** Record supported Codex CLI/desktop versions and available hook/protocol schemas. Generate types from the installed release rather than assume the latest repository schema matches it.
 - [ ] **COMPAT-02** Test trusted observing hooks for session, prompt, tool, compaction, subagent, Stop, Interrupt and SessionEnd events on every supported surface.
 - [ ] **COMPAT-03** Verify neutral output for each hook event and a short no-app timeout. Ensure the observer never injects prompt context or blocks normal work.
-- [ ] **COMPAT-04** Validate one-time PermissionRequest Allow/Deny, no-decision terminal fallback and malformed/expired response behavior. Do not reuse Claude's `updatedPermissions` contract.
-- [ ] **COMPAT-05** Probe managed stdio App Server initialization, auth/model discovery, turn/item streaming, final result, approval, user-input and cancellation.
-- [ ] **COMPAT-06** Investigate shared-daemon/existing-desktop attachment as an optional capability. Prove passive observation and multi-client resolution before enabling controls; otherwise leave this adapter disabled.
+- [ ] **COMPAT-04** For interactive v1, validate any selected one-time hook PermissionRequest Allow/Deny route, no-decision terminal fallback and malformed/expired responses. This route is optional alongside managed approvals; MVP uses the monitoring indicator/return-to-Codex fallback. Do not reuse Claude's `updatedPermissions` contract.
+- [ ] **COMPAT-05** Before Stage 8, probe managed stdio App Server initialization, auth/model discovery, turn/item streaming, final result, approval, user-input and cancellation. This interactive gate does not block monitor MVP.
+- [ ] **COMPAT-06** As a separately selected extension, investigate shared-daemon/existing-desktop attachment. Prove passive observation and multi-client resolution before enabling controls; otherwise leave this adapter disabled. MVP and v1 cannot depend on it.
 - [ ] **COMPAT-07** Verify supported navigation destinations. Where exact chat/terminal navigation is unavailable, retain clearly named best-effort Open project/Open Codex actions.
 - [ ] **COMPAT-08** Spike native toast activation, mixed-DPI overlay behavior and Explorer-to-WebView2 file drop.
-- [ ] **COMPAT-09** Save sanitized event/protocol fixtures and a capabilities matrix in `docs/codex-compatibility.md`.
+- [ ] **COMPAT-09** Save sanitized event/protocol fixtures and the version/surface/evidence/failure/fallback matrix in `docs/codex-compatibility.md`, identifying MVP, v1 and extension scope.
+- [ ] **COMPAT-10** Enforce the registry in backend commands and production UI. Test that unsupported/unknown versions, stale requests and absent adapters cannot expose or execute controls; demo fixtures cannot enable production capabilities.
 
 Deliverable capability matrix:
 
@@ -187,7 +221,7 @@ Deliverable capability matrix:
 
 Current hooks and App Server have distinct contracts and trust/lifecycle requirements. Treat their documented coverage as the starting point and installed-version results as the release gate. [Codex hooks](https://developers.openai.com/codex/hooks/), [Codex App Server](https://developers.openai.com/codex/app-server/)
 
-**Done when:** each supported capability has passing evidence and every unsupported capability has a clear UI fallback. Core delivery cannot depend on unproven shared-desktop access.
+**Done when:** every capability in the selected profile satisfies all four gate conditions, backend and UI enforce the registry, and unsupported capabilities have tested fallbacks. Deferred v1/extension probes remain pending without blocking a verified MVP. Core delivery cannot depend on unproven shared-desktop access.
 
 ## Stage 4 — Create your identity and preserve the Windows shell
 
@@ -199,16 +233,37 @@ Tasks:
 - [ ] **SHELL-04** Preserve topmost transparency, nonactivation, click-through, hidden wake strip, compact/expanded states and display positioning. Remove unnecessary broad browser-protection overrides.
 - [ ] **SHELL-05** Add fixed-monitor/follow-cursor placement, logical-pixel geometry, edge offset and configurable global shortcut with conflict handling.
 - [ ] **SHELL-06** Make Escape, pointer leave, typing, drag and pinned-request behavior consistent. Cosmetic interactions cannot replace an actionable card.
-- [ ] **SHELL-07** Preserve greeting, mini avatars, hover feedback, sounds, settings and drop affordance using original visuals; add mute/reduced-motion options.
-- [ ] **SHELL-08** Create a larger detail/history window for long output, diff and approval content.
+- [ ] **SHELL-07** Keep selected greeting, mini-avatar, hover and sound behaviors using original visuals; add mute/reduced-motion options and core settings for MVP. Show the drop affordance only when its real attachment workflow ships in v1. Do not require every inherited expression/emote/sound.
+- [ ] **SHELL-08** Create a basic history/detail window for MVP session/PR inspection; add long streamed output, diff and approval content in interactive v1.
+- [ ] **SHELL-09** Review every audit entry into `docs/inherited-feature-decisions.md`: keep/adapt/defer/remove, Codex benefit, profile and task IDs. Isolate deferred services and remove dormant controls from production UI, including the MVP control-removal portion of PARITY-13; retain the complete audit as reference.
 
 Files affected include `windows/src/island/*`, `src/core/layout.ts`, `src/mochi/*`, `src/core/sound.ts`, styles/settings/views, `src-tauri/src/island.rs`, `tray.rs`, `settings.rs`, configuration/icons and packaging scripts.
 
 **Done when:** your branded shell runs at multiple DPI scales without stealing focus, blocking unrelated desktop areas or displaying protected upstream assets. Coucou's source and asset licenses have different scope. [Asset license](https://github.com/louis-cfm/coucou/blob/3cc3333203f60f63326ee949b7b86c7549992a1f/LICENSE-ASSETS.md)
 
-## Stage 5 — Introduce backend state, persistence and request routing
+## Stage 5 — Establish backend authority, persistence and request routing
 
-Implement the reliable foundation before replacing event handlers one by one.
+Implement the reliable foundation before replacing event handlers one by one. Use this authority chain for Codex, GitHub and Windows events:
+
+```text
+Codex / GitHub / OS
+        -> Backend adapters
+        -> Normalized events
+        -> Pure Rust reducer
+        -> Snapshot + monotonic event sequence
+        -> Frontend view store
+        -> Island / detail UI
+```
+
+The UI sends typed user intent through Tauri IPC to the backend dispatcher/request router. The dispatcher validates capabilities and exact request/session identities, then runs adapter side effects outside the pure reducer. Confirmed source events or explicit typed success/failure results re-enter the event stream. Rendering an animation or queuing a command is never proof that a request resolved.
+
+Architecture invariants:
+
+- The frontend never queries Codex or GitHub directly, stores service secrets or owns authoritative session/PR/request state.
+- The frontend never decides that an approval/question is resolved. It may show a local submitting state, but authoritative state follows a confirmed response or source resolution, including another client's action.
+- Draft text, focus, expansion and animation are local presentation state; pending requests, lifecycle, capability/connection health and durable history belong to the backend.
+- Adapters own IO/transport and normalization. The reducer is deterministic and performs no network, process wait or blocking disk IO; bounded effects/storage workers perform those operations and report results.
+- Each backend state update has a sequence; snapshot/replay repairs reloads and gaps. GitHub check state and Codex work state stay separate even when presented together.
 
 Tasks:
 
@@ -218,10 +273,11 @@ Tasks:
 - [ ] **CORE-04** Add bounded SQLite history, atomic/migrated preferences and redacted rotating logs. Sensitive content retention is configurable and off by default.
 - [ ] **CORE-05** Deduplicate source events; coalesce high-volume text deltas without losing final content/control events. Replace ticker array-index change detection with sequence IDs.
 - [ ] **CORE-06** Scope timers to source event/turn generation. A delayed success/badge timer cannot reset newer work.
-- [ ] **CORE-07** Build a request router with exact source IDs, bounded concurrency, presentation acknowledgement, deadlines and exactly-once reply semantics.
+- [ ] **CORE-07** Build a request router with exact source IDs, bounded concurrency, presentation acknowledgement, deadlines and exactly-once reply semantics. Establish the routing contract in MVP; enable decision/input replies only after the v1 capability gate passes.
 - [ ] **CORE-08** Clear resolved/expired/cancelled requests, including another client's resolution. Fall back promptly when a hook request cannot be presented.
 - [ ] **CORE-09** Harden named-pipe ACL/client identity, size/schema limits, read deadlines and collisions; preserve fast no-app behavior.
-- [ ] **CORE-10** Replace frontend authority with a view store consuming backend snapshots/deltas; make bridge errors explicit rather than silently converting failed actions to success-looking null results.
+- [ ] **CORE-10** Replace frontend authority with a view store consuming backend snapshots/deltas and typed intents. Make bridge errors explicit rather than silently converting failed actions to success-looking null results.
+- [ ] **CORE-11** Add architecture/contract checks against direct frontend Codex/GitHub calls and authoritative mutations; test intent -> dispatcher -> adapter result -> reducer -> snapshot flow, including failed delivery and external resolution. Extend request-reply coverage when v1 controls are added.
 
 Proposed module layout; create only as each component is implemented:
 
@@ -273,17 +329,17 @@ Tasks:
 - [ ] **GH-01** Resolve canonical repo/worktree/common Git directory, branch, HEAD and remotes through read-only Git operations.
 - [ ] **GH-02** Bind session to repo and PR with fork/head-repository/ref/SHA awareness; expose correction for ambiguous remotes or PRs.
 - [ ] **GH-03** Support opt-in existing `gh` authentication through structured calls, or a least-privilege credential/account flow. Keep secrets backend-only.
-- [ ] **GH-04** Show PR title/state/draft, review requests/decisions, relevant comments/activity and returned links.
-- [ ] **GH-05** Show current-head check runs, commit statuses, workflow progress, failed-job links and associated deployments. Distinguish pending/skipped/neutral/cancelled/failed/passed.
+- [ ] **GH-04** For MVP show PR title/state/draft and returned links. Add useful review requests/decisions and comment activity in interactive v1; detailed review actions require their own verified packet.
+- [ ] **GH-05** For MVP show current-head check runs, commit statuses, workflow progress and failed-job links. Distinguish pending/skipped/neutral/cancelled/failed/passed. Associated deployment details are a selected extension.
 - [ ] **GH-06** Implement pagination, conditional caching, serial request scheduling, Retry-After/reset handling, jitter and backoff. First load is a silent baseline.
 - [ ] **GH-07** Deduplicate by identity plus status/revision/SHA; capture same-ID transitions and multiple updates between polls.
-- [ ] **GH-08** Preserve optional account repository/star statistics with correct pagination, separate from the project workflow card.
+- [ ] **GH-08** Only if selected as an extension, adapt account repository/star statistics with correct pagination, separate from the project workflow card. Hide the inherited panel otherwise.
 - [ ] **GH-09** Add Open PR/job/check/diff, Copy link and debounced Refresh. Mutation actions remain separate later tasks with actual support and visible outcomes.
 - [ ] **GH-10** Test forks, branch reuse, multiple worktrees, head changes, old-SHA green checks, private permission errors, offline cache and API rate limits.
 
 Initial proposed refresh policy: roughly 30 seconds during running CI, 60–90 seconds for an active PR, and five minutes idle; obey server hints/limits and refresh after meaningful local changes. A hosted webhook relay is optional later, not required for desktop-only operation.
 
-**Done when:** a test PR's current-head CI/review changes appear correctly, old checks are visibly stale, and restart/polling does not duplicate alerts. [GitHub API guidance](https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api)
+**Done when:** a test PR's current-head CI changes appear correctly for MVP, review changes do so when in scope for v1, old checks are visibly stale, and restart/polling does not duplicate alerts. [GitHub API guidance](https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api)
 
 ## Stage 8 — Implement interactive Codex sessions
 
@@ -302,42 +358,62 @@ Tasks:
 
 **Done when:** the companion can complete a real managed coding conversation with streamed output, a supported approval/question, interruption and recovery; unsupported existing desktop sessions cannot receive accidental controls.
 
-## Stage 9 — Finish notifications and process/status monitoring
+## Stage 9 — Notifications and health in two release scopes
 
-Tasks:
+### 9A — Monitor MVP notifications, connection health and recovery
 
-- [ ] **STATUS-01** Centralize notification priority: pending decision/input → actionable failure → active work → recent completion → idle. Preserve GitHub CI as independent state.
+Depends on Stages 4–7, not managed App Server support. Complete this before the MVP QA/release packets.
+
+- [ ] **STATUS-01** Centralize notification priority: waiting for a decision/input → actionable failure → active work → recent completion → idle. In MVP show a verified route back to Codex; show actual reply controls only when v1 capabilities pass. Preserve GitHub CI as independent state.
 - [ ] **STATUS-02** Add island badge/reveal/sound/toast policies, grouping, deduplication, quiet/full-screen rules and per-category settings.
 - [ ] **STATUS-03** Implement native Windows notification registration and activation; click opens the right session/PR/detail or explains a stale target.
-- [ ] **STATUS-04** Track managed process handles, start time, exit and transport health; do not identify a session solely by a reusable PID.
-- [ ] **STATUS-05** Show connected/reconnecting/stale/offline with last-seen evidence. Silence during a long-running tool is not automatically a hang.
-- [ ] **STATUS-06** Reconcile pending requests after crash/sleep/disconnect. Never replay an old permission decision or automatically restart a conversation.
-- [ ] **STATUS-07** Provide optional low-rate resource display only for tracked processes. Cancellation uses supported turn controls, not broad process termination.
-- [ ] **STATUS-08** Add best-effort tracked window focus for sessions launched through the app; test exact terminal navigation before promising it. Mark WSL/remote support separately.
+- [ ] **STATUS-05** Show observer/GitHub connected/reconnecting/stale/offline with last-seen evidence; repair backend/frontend snapshots after reload, app restart and sleep. Silence during a long-running tool is not automatically a hang. Extend these checks to managed transports in 9B.
 
-**Done when:** actionable events are visible once, toasts open correct targets, transport/process failures produce truthful recovery state, and quiet users do not receive a toast for every tool call.
+**9A done when:** Codex/GitHub monitoring alerts appear once, toasts open verified targets or explain stale ones, observer/network failures recover truthfully, basic history survives restart, and quiet users do not receive a toast for every tool call. No managed-chat dependency is allowed.
 
-## Stage 10 — Complete files, context and optional integration parity
+### 9B — Interactive v1 managed-process and request recovery
 
-Tasks:
+Depends on Stage 8 and 9A. Keep this a separate packet/PR after MVP delivery.
+
+- [ ] **STATUS-04** Track owned managed process handles, start time, exit and transport health; do not identify a session solely by a reusable PID. Existing-session monitoring may report only verified observer/session evidence, not inferred process ownership.
+- [ ] **STATUS-06** Reconcile pending requests after crash/sleep/disconnect; extend STATUS-05 to the managed transport. Never replay an old permission decision or automatically restart a conversation.
+- [ ] **STATUS-07** Only if selected as an extension, provide low-rate resource display for explicitly tracked processes. Cancellation uses supported turn controls, not broad process termination.
+- [ ] **STATUS-08** Only if selected as an extension, add best-effort tracked window focus for sessions launched through the app; test exact terminal navigation before promising it. WSL/remote support requires separate gates. Existing verified Open project/Open Codex fallbacks remain available without this extension.
+
+**9B done when:** owned-process/transport failures produce truthful recovery state, pending requests reconcile safely and supported interruption targets the exact managed turn. Optional process metrics/navigation do not block interactive v1.
+
+## Stage 10 — Core attachments and selected extensions
+
+### Core scope — Interactive v1 attachments
+
+Depends on Stage 5 and verified Stage 8 input capabilities. MVP ships without active drop/send controls. Use Coucou's useful staging/mailbox idea where it improves the Codex workflow, rather than copying decorative or simulated completion.
 
 - [ ] **PARITY-01** Implement multiple-file staging with size/type validation, collision-safe naming, quotas, retention, cancellation and per-file status.
-- [ ] **PARITY-02** Preserve original drop/mailbox interaction using your avatar, but connect completion to actual copy/preparation. Use Preparing for local work and indeterminate status when progress is unknown.
+- [ ] **PARITY-02** Adapt the selected drop/mailbox interaction using your avatar and connect completion to actual copy/preparation. Use Preparing for local work and indeterminate status when progress is unknown.
 - [ ] **PARITY-03** Add attachment preview/removal and negotiate actual supported Codex text/image/path inputs. Unsupported formats never silently disappear.
-- [ ] **PARITY-04** Add optional explicit Windows window metadata attachment; screenshot capture is a distinct previewable operation with supported image input.
-- [ ] **PARITY-05** Preserve n8n execution/details, with functional workflow filtering and correct same-ID status transitions.
-- [ ] **PARITY-06** Preserve Vercel lists/details/links, add running states and stable project filters/commit binding.
-- [ ] **PARITY-07** Preserve Stripe balance/charges, correct multi-currency totals, minor units and successful-payment semantics.
-- [ ] **PARITY-08** Preserve Resend recent emails with pending/delivered/failed distinctions; implement optional explicit sending only with validated settings and actual API outcome.
-- [ ] **PARITY-09** Preserve Notion recent accessible-page links and optional project pinning.
-- [ ] **PARITY-10** Preserve Cal.com bookings; add a correct timezone/weekday-aware calendar/details if selected for full parity.
-- [ ] **PARITY-11** Add Windows compose/share fallback; label Draft opened independently of a verified Sent outcome.
-- [ ] **PARITY-12** Move all optional services into the shared typed scheduler, health, filtering and notification framework. Disabled services must stop network activity.
-- [ ] **PARITY-13** Remove or implement dormant question/retry/search/result controls. A structured research card is optional; do not ship an action that only looks functional.
 
-**Done when:** the preserved workflows actually work, progress and delivery wording are truthful, optional services are isolated from Codex state, and their absence does not prevent the core app from running.
+**Core done when:** multiple attachments are validated, prepared, previewed/removed and supplied through supported Codex inputs; cancellation/failure/restart behavior is tested and progress is truthful.
 
-## Stage 11 — Verify the complete release candidate
+### Optional scope — Select by Codex benefit, one extension packet at a time
+
+The following IDs retain traceability to the audit; their presence does not make them required. Record each as selected/deferred/removed. A selected module needs its own real adapter, failure/recovery behavior, tests and declared release scope. Do not implement all inherited service panels as one parity task.
+
+- [ ] **PARITY-04** If selected, add explicit Windows window metadata attachment; screenshot capture is a distinct previewable operation with supported image input.
+- [ ] **PARITY-05** If selected, adapt n8n execution/details, with functional workflow filtering and correct same-ID status transitions.
+- [ ] **PARITY-06** If selected, adapt Vercel lists/details/links, running states and stable project filters/commit binding.
+- [ ] **PARITY-07** If selected, adapt Stripe balance/charges, correct multi-currency totals, minor units and successful-payment semantics.
+- [ ] **PARITY-08** If selected, adapt Resend recent emails with pending/delivered/failed distinctions; explicit sending requires validated settings and actual API outcome.
+- [ ] **PARITY-09** If selected, adapt Notion recent accessible-page links and project pinning.
+- [ ] **PARITY-10** If selected, adapt Cal.com bookings with a correct timezone/weekday-aware calendar/details.
+- [ ] **PARITY-11** If selected, add Windows compose/share fallback; label Draft opened independently of a verified Sent outcome.
+- [ ] **PARITY-12** Put each selected service into the shared typed scheduler, health, filtering and notification framework. Disabled/deferred services must stop network activity.
+- [ ] **PARITY-13** Remove dormant question/retry/search/result controls from MVP through the Stage 4 SHELL-09 packet; this removal does not depend on Stage 10 implementation. Implement only selected useful workflows in later packets. A structured research card is optional. Split status by control and profile; do not ship an action that only looks functional.
+
+**Optional packet done when:** the selected workflow actually works, failure/recovery and delivery wording are verified, and the service is isolated from Codex state. Its absence cannot prevent the core app from running. Deferred modules remain outside release acceptance.
+
+## Stage 11 — Verify the declared release candidate
+
+Run this stage for MVP, again for interactive v1, and for any extension release. Before QA, freeze a scope matrix listing each required feature/task, capability evidence, backend behavior, failure tests, persistence/recovery tests and automated-check results. Mark excluded tasks **deferred / not applicable with reason**, never implemented. MVP QA must not wait for chat/attachments/services; v1 must include all its interactive/request/attachment cases.
 
 Tasks:
 
@@ -346,17 +422,19 @@ Tasks:
 - [ ] **QA-03** Test Windows display scales 100/125/150/200%, mixed monitors, hotplug, RDP, fullscreen, click-through, drag/drop and focus restoration.
 - [ ] **QA-04** Test keyboard/IME input, Escape, shortcut conflicts, screen-reader names, high contrast, text scaling and reduced motion.
 - [ ] **QA-05** Test multiple roots/subagents/tools, prompt after completion, out-of-order duplicates, sleep/restart, old timers and stream final reconstruction.
-- [ ] **QA-06** Test GitHub pagination/rate limits/auth expiry/fork SHA mapping and all optional service failures using fixtures plus opt-in real-account validation.
-- [ ] **QA-07** Test large/multiple/unsupported files, disk full/access denied, inbox quotas, copy cancellation and cleanup.
+- [ ] **QA-06** Test GitHub pagination/rate limits/auth expiry/fork SHA mapping and each in-scope optional service's failures using fixtures plus opt-in real-account validation.
+- [ ] **QA-07** For v1 or a file-related extension, test large/multiple/unsupported files, disk full/access denied, inbox quotas, copy cancellation and cleanup. In MVP verify that unsupported inherited file controls are absent/disabled instead.
 - [ ] **QA-08** Measure event latency, CPU/memory/frame activity, network rates and history/log bounds. Confirm no animation/cursor polling while fully hidden; set resource budgets from measured baseline.
 - [ ] **QA-09** Validate URL/argument handling, pipe ACL/read limits, backend-only credentials, strict WebView capabilities and redacted diagnostics.
-- [ ] **QA-10** Freeze documented supported versions and disabled capabilities, close release blockers, and create a release candidate checklist.
+- [ ] **QA-10** Freeze the release profile, supported versions and disabled capabilities, close in-scope release blockers, and create a release candidate checklist. Audit every in-scope feature against the four-part completion rule and the Stage 3 gate.
 
 Suggested engineering target: ordinary local event-to-state update under about 250 ms, bounded queues/storage, no network/IPC wait on the render path, no hidden frame loop. These are test targets, not performance claims already achieved.
 
-**Done when:** required automated checks pass and the actual packaged release candidate passes the Windows behavior/failure matrix. Preview screenshots alone are insufficient.
+**Done when:** required automated checks pass and the actual packaged candidate passes the profile's Windows behavior/failure/recovery matrix. Each in-scope feature has real backend, failure, persistence/recovery and test evidence. Preview screenshots alone are insufficient. Record an explicit QA result per release; a previous MVP pass is not a v1 pass.
 
 ## Stage 12 — Package, sign, publish, update and uninstall
+
+Run this delivery gate for the same profile/version that passed Stage 11. MVP can be a signed monitor beta; interactive v1 receives its own candidate, migration/update checks and final v1.0 release. An extension is included only after its profile's verification passes. Do not relabel a monitor beta as the finished interactive product.
 
 Tasks:
 
@@ -369,11 +447,11 @@ Tasks:
 - [ ] **REL-07** Test uninstall and a removed/missing relay against supported Codex releases; leave no broken startup task or unexplained active hook entry.
 - [ ] **REL-08** Add release CI scoped to your repository with version checks, quality gates, protected signing, installer/artifact generation and checksums.
 - [ ] **REL-09** Write README/onboarding, permissions/data explanation, supported capability/version table, troubleshooting and real screenshots/video using your assets. State polling latency and terminal/shared-desktop limitations honestly.
-- [ ] **REL-10** Publish a beta to your own GitHub releases, collect opt-in feedback and fix blockers. Publish v1.0 only after release candidate gates pass.
+- [ ] **REL-10** Publish the monitor MVP beta to your own GitHub releases after its Stages 11–12 gates pass; collect opt-in feedback and fix blockers. Publish interactive v1.0 only after its separate candidate and delivery gates pass. Clearly document deferred extensions.
 
 Release contents: signed installer, versioned app/relay, updater payload and signatures/metadata, checksums, release notes, supported-version matrix and installation/troubleshooting guide. A rolling download alias is optional; it is not itself an updater. Tauri verifies signed update artifacts and expects the signature content in update metadata. [Tauri updater guidance](https://v2.tauri.app/plugin/updater/)
 
-**Done when:** a clean machine can install, configure, use, update and uninstall the released product through documented steps, without corrupting Codex configuration or misrepresenting capabilities.
+**Done when:** a clean machine can install, configure, use, update and uninstall the declared released profile through documented steps, without corrupting Codex configuration or misrepresenting capabilities. Record release/signature/artifact evidence for that exact version. Both Stages 11 and 12 must pass before marking the profile delivered.
 
 ## Stage 13 — Maintain the released product
 
@@ -393,7 +471,7 @@ Tasks:
 Your instruction to commit and push frequently applies throughout implementation. Use the following rules:
 
 1. Start by inspecting branch, status and remotes; fetch `origin` before integrating remote work. Preserve unrelated user changes.
-2. Implement one coherent behavior or documentation improvement on a short branch such as `work/codex-foundation`, `feature/codex-monitor` or `feature/github-status`.
+2. Activate one bounded stage packet/PR, with declared profile/task IDs and exclusions, on a short branch such as `work/windows-baseline`, `feature/codex-monitor` or `feature/github-status`. Finish its review/gate before starting the next packet.
 3. Run checks relevant to the change. Documentation-only changes need consistency/link checks; code needs meaningful build/tests. Do not claim a build passed when it was not run.
 4. Update `docs/execution-ledger.md` with task IDs, completed/pending status, changed files, check results and remaining limitations. Record the completed commit hash in the next ledger update or externally verified milestone record; avoid a self-referential commit loop.
 5. Stage explicit files, inspect the diff, and make a descriptive commit. Push every completed commit immediately, and push remaining completed commits before ending a work session. Cadence follows useful verified changes, not arbitrary time-based empty commits.
@@ -404,26 +482,32 @@ Your instruction to commit and push frequently applies throughout implementation
 
 Agent work is permitted by your instruction. Assign independent tasks with clear file/module ownership. Agents report their edits, tests and limitations to the coordinating agent. Only the coordinating agent stages, commits and pushes the shared checkout; use isolated worktrees for genuinely independent branch work and integrate before combined checks. Do not run competing Git mutations from several agents. Agent availability does not replace review or justify creating work without a useful independent subtask.
 
-Recommended PR order:
+Recommended packet/PR order (split a stage further if its review would be too large; keep packets sequential):
 
-1. Repository documentation and Windows CI baseline.
-2. Identity/assets/window shell changes.
-3. Shared model/reducer/replay/storage foundation.
-4. Codex relay and reviewed hook installer.
-5. Multi-session monitor and history UI.
-6. Git/worktree resolver and GitHub scheduler/cards.
-7. Managed App Server transport/auth/streaming.
-8. Real approval/question routing and detail UI.
-9. Windows notifications/process recovery.
-10. Attachments/context and separate optional-service fixes.
-11. Accessibility/performance/packaging tests.
-12. Signed updater/installer and release documentation.
+1. Stage 2: Windows baseline, development evidence and required Windows CI.
+2. Stage 3 MVP scope: observing/navigation/Windows probes and enforced capability registry.
+3. Stage 4: own identity/assets, shell/settings/basic history window and inherited-feature decisions.
+4. Stage 5: backend authority, model/reducer/replay/storage/request contracts.
+5. Stage 6: Codex relay, previewable hook installer and independent session monitoring.
+6. Stage 7 MVP scope: Git/worktree resolver and GitHub PR/CI scheduler/cards.
+7. Stage 9A: Windows notifications, observer/GitHub health and restart/reload recovery.
+8. Stage 11 MVP profile: automated checks and actual packaged Windows QA.
+9. Stage 12 MVP profile: signed installer/updater, clean-machine validation and monitor beta.
+10. Stage 3 interactive scope: managed-session and selected permission/input capability probes.
+11. Stage 8: managed App Server transport/auth/streaming, then real approval/question/control packets and detailed history; add selected Stage 7 review details separately.
+12. Stage 9B: owned-process/transport and request recovery.
+13. Stage 10 core: attachment staging/previews and supported Codex input delivery.
+14. Stage 11 interactive v1 profile: full in-scope QA and new release candidate.
+15. Stage 12 interactive v1 profile: migration/update/clean-machine checks and v1.0 publication.
+16. Selected extension packets and their compatibility/QA/release gates, supported by Stage 13 maintenance.
 
-The source/planning import is authorized for this update. Application coding, dependency installation and builds remain subsequent stages. Future publishing targets `YashwanthDevelops/Anti-Scrolling-Notch`; hooks still require configuration review and Codex's trust flow at installation time.
+This update changes planning documentation only. Application coding, dependency installation and builds remain subsequent work packets. Future publishing targets `YashwanthDevelops/Anti-Scrolling-Notch`; hooks still require configuration review and Codex's trust flow at installation time.
 
 ## Execution ledger
 
 Keep the authoritative progress record in `docs/execution-ledger.md` alongside this plan. Each milestone records client date, task IDs, outcome, checks, commit/branch and push evidence. The initial entry must distinguish source/documentation import from successful application build; Stages 2–13 stay pending until their acceptance evidence exists.
+
+Track scope at task + profile + packet level. Tasks spanning MVP/v1 (for example SHELL-08, GH-04 and STATUS-05) need separate sub-status/evidence rather than a premature whole-task checkmark. Record QA/REL results per release version. Deferred extensions remain deferred; they do not make a released core profile incomplete or count as implemented functionality.
 
 The root workspace copy of this plan is a convenience mirror. After import, update the repository copy first and synchronize the root copy, so the published GitHub plan remains authoritative.
 
@@ -432,30 +516,38 @@ The root workspace copy of this plan is a convenience mirror. After import, upda
 | Audit catalog | Work covered by this plan |
 |---|---|
 | F01–F28: shell/lifecycle/navigation/settings | Stages 4–6, 9, 11–12 |
-| F29–F43: avatar/motion/sounds | Original replacements in Stage 4; accessibility/performance in 11 |
+| F29–F43: avatar/motion/sounds | Selected original replacements in Stage 4; remove/defer non-beneficial choreography; accessibility/performance in 11 |
 | F44–F66: coding hooks/ticker/approvals | Stages 3, 5–6, 8–9 |
 | F67–F72: chat | Stage 8 |
-| F73–F89: files/window/mail/search pieces | Stage 10; unsupported/dormant actions removed or explicitly implemented |
-| F90: prototype voice | Optional extension, not an existing working parity requirement |
-| F91–F112: GitHub and service integrations | Stage 7 plus complete optional modules in 10 |
+| F73–F89: files/window/mail/search pieces | Core files in v1; window/mail/search selected as extensions; dormant controls removed from MVP |
+| F90: prototype voice | Optional extension, not a required existing feature |
+| F91–F112: GitHub and service integrations | MVP PR/CI in Stage 7; detailed reviews in v1; unrelated services/statistics/deployments selected separately |
 | F113–F122: platform/delivery/support/assets | Stages 1–2, 4, 11–13; macOS-only distribution is a reference |
 | F123–F124: missing updater/notifications/process monitoring | New functionality in Stages 9 and 12 |
 
-## Completion checklist
+## Completion checklist by release profile
+
+Use the checklist against a declared scope/version. MVP may pass its rows while v1 remains pending; the whole project is complete after interactive v1 passes both release gates. Selected extensions need their own completion evidence.
 
 - [x] Your GitHub repository is the development/publication origin; inherited release scripts must have their destination and branding adapted before product releases.
 - [ ] A clean checkout builds and tests reproducibly.
 - [ ] Own identity/assets are used; MIT attribution is retained.
-- [ ] The Windows island, tray, settings, startup, hotkey and detail panel work.
+- [ ] MVP: the original Windows island, tray, settings, startup, hotkey and basic history/detail panel work.
 - [ ] Multiple Codex sessions/subagents remain independent and survive UI reloads.
-- [ ] Supported hook/managed-session capabilities are verified and clearly separated.
-- [ ] Approvals/questions route to the exact request, resolve once and expire safely.
-- [ ] GitHub PR/CI/review information corresponds to the correct repository and SHA.
-- [ ] Notifications and process/transport health are truthful, quiet and recoverable.
-- [ ] File readiness, context sending and optional service actions are functional and accurately labeled.
+- [ ] MVP: supported observing/navigation capabilities pass the Stage 3 gate; unsupported interactive controls are absent/disabled.
+- [ ] MVP: GitHub PR/CI information corresponds to the correct repository and SHA.
+- [ ] MVP: notifications and observer/GitHub health are truthful, quiet and recoverable.
+- [ ] Interactive v1: managed streaming chat, history and send/steer/interrupt pass compatibility and behavior/failure/recovery tests.
+- [ ] Interactive v1: approvals/questions route to the exact request, resolve once and expire safely.
+- [ ] Interactive v1: multiple attachments and supported Codex inputs work with truthful preparation/delivery outcomes.
+- [ ] Interactive v1: owned-process/request recovery and selected review details are verified.
+- [ ] Each inherited feature has an explicit keep/adapt/defer/remove decision; deferred controls/services are inactive.
+- [ ] Each in-scope feature has backend, failure, persistence/recovery and automated verification evidence.
 - [ ] Keyboard/accessibility/reduced-motion/performance checks pass.
 - [ ] Signed installation, update, migration and uninstall are tested on a clean machine.
 - [ ] Public documentation and release notes match the shipped capability matrix.
-- [ ] A beta is validated, release blockers are closed and the v1.0 installer is published.
+- [ ] MVP: its Stage 11 QA and Stage 12 delivery gates pass and the signed monitor beta is published.
+- [ ] Interactive v1: its Stage 11 QA and Stage 12 delivery gates pass, release blockers are closed and v1.0 is published.
+- [ ] Selected extensions: separately verified capabilities and delivery gates pass before their functionality ships.
 
-Complete the source/planning import in Stage 1, then begin **BASE-01 through BASE-07** and the Codex compatibility gate. Establish the source, build baseline and adapter contracts before changing each subsystem. All implementation commits and pushes belong to your Anti-Scrolling-Notch repository.
+The source/planning import is already published. The next implementation packet is **Stage 2: BASE-01 through BASE-07 on `work/windows-baseline`**. Create its packet before coding; establish the reproducible build, then proceed to the MVP capability gate. All implementation commits and pushes belong to your Anti-Scrolling-Notch repository.
