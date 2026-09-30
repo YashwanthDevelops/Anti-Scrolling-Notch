@@ -10,7 +10,7 @@ The earlier [repository audit](coucou-analysis.md) defines 124 catalog entries a
 
 | Item | Starting decision |
 |---|---|
-| Product name | Anti-Scrolling-Notch. Use own app IDs, artwork and audio before distributing builds. |
+| Product name | Anti-Scrolling-Notch. Use own app IDs; distributed artwork/audio must be original or covered by written asset permission. |
 | GitHub repository | [YashwanthDevelops/Anti-Scrolling-Notch](https://github.com/YashwanthDevelops/Anti-Scrolling-Notch). Existing independent repository; no GitHub fork required. |
 | Development checkout | `C:\Users\Yashwanth\Windows Notch\app`. Import the audited Coucou checkout here and retain its Git history. |
 | Reference checkout | Existing `.analysis\coucou`, kept separate from implementation. |
@@ -20,14 +20,15 @@ The earlier [repository audit](coucou-analysis.md) defines 124 catalog entries a
 | Execution policy | One active stage packet and one active implementation PR at a time; review and integrate it before starting dependent work. |
 | Agent policy | Agents may work on independent modules; the coordinating agent owns integration, staging, commits and pushes. |
 | Initial platform | Windows 11 x64; additional Windows/ARM64 support only after testing. |
-| App stack | Tauri 2, Rust, TypeScript/Vite, original Canvas avatar, WebView2. |
+| App stack | Tauri 2, Rust, TypeScript/Vite, Canvas avatar under the asset-permission/fallback policy, WebView2. |
+| UI direction | Preserve Coucou's island layout, visual hierarchy, generic motion/transition code and interaction timing. Adapt backend wiring and Codex labels without an unsolicited redesign. Exact protected character/assets require written permission before distribution. |
 | Runtime | Per-user tray app; no Windows service or administrator requirement. |
 | Existing Codex sessions | Trusted hook monitoring; supported controls enabled only after compatibility tests. |
 | Interactive Ask | Companion-managed Codex App Server sessions using stdio. |
 | Existing desktop session control | Optional extension, disabled until passive attachment and arbitration are proven. |
 | Persistent state | Migrated preferences, bounded SQLite event/history data, OS-protected credentials. |
 | GitHub | Read-first PR/review/check monitoring with conditional polling; optional hosted webhooks later. |
-| Branding | Own name, app IDs, avatar, icon and sounds; retain upstream MIT attribution. |
+| Branding | Own name/app IDs; retain upstream MIT attribution. Use protected character/icon/sounds only with written permission covering the release, otherwise original replacements that preserve the surrounding UI and generic motion. |
 
 ## Release scopes and inherited-feature decisions
 
@@ -39,7 +40,15 @@ The earlier [repository audit](coucou-analysis.md) defines 124 catalog entries a
 
 MVP does not depend on managed chat, attachment transport or optional services. Monitor approvals/questions may show a waiting indicator and a verified route back to Codex, but interactive controls remain out of the MVP scope. Hidden or disabled inherited controls must explain the supported alternative where useful. Interactive v1 is the complete core product; deferred extensions do not block it.
 
-Coucou is not a mandatory parity target. Review all 124 audit entries and record **keep / adapt / defer / remove** with the Codex benefit, release profile and task IDs in `docs/inherited-feature-decisions.md` during Stage 4. Keep useful shell, activity and workflow semantics; original character choreography, all 28 sounds, account star statistics and unrelated services are not completion requirements. Deferred source may remain isolated as reference, but it must not expose misleading UI, start networking or run unused background loops in shipped builds.
+Coucou is the visual and workflow reference, with UI fidelity now an explicit user requirement. Review all 124 audit entries and record **keep / adapt / defer / remove** with the Codex benefit, release profile and task IDs in `docs/inherited-feature-decisions.md` during Stage 4. Keep the island layout, visual hierarchy, expansion/collapse motion, hover/drag/keyboard behavior, tickers and card transitions; adapt their data/events to Codex. Character artwork/expressions/animations, icons and sounds follow the separate asset-permission gate below. Account statistics and unrelated services remain scheduled extensions rather than MVP/v1 requirements. Deferred source may remain isolated as reference, but it must not expose misleading UI, start networking or run unused background loops in shipped builds.
+
+The plan accounts for every audited Coucou feature, but it does not promise every feature in the first release or pretend prototypes/placeholders already work. The core targets Codex coding sessions on verified CLI/desktop surfaces. A companion-managed App Server chat is distinct from passive monitoring of an existing desktop chat; controlling an already-running desktop conversation requires the separately verified attachment/arbitration capability. General ChatGPT conversations are not automatically included in this Codex contract.
+
+### Preserve the UI while adapting the integration
+
+Keep existing layout/components and generic motion infrastructure wherever practical. During the Stage 2 baseline run, capture a small reference set of compact/expanded/greeting/settings/drop states and key transition timings at a fixed DPI. Reuse it for focused comparisons when affected components change; do not repeatedly redesign or revalidate the whole interface for backend-only work. The priority is a Coucou-like experience with accurate Codex data and controls.
+
+The source license permits code reuse; `LICENSE-ASSETS.md` separately restricts distributing the Coucou/Mochi names, character design/expressions/animations, icons and sounds. Exact protected visuals/sounds are a release option only after written permission covering their use is recorded. Original replacements are the fallback before distribution, while retaining the surrounding island UI and generic motion. The original local baseline remains a reference. Do not treat the existing source import or a personal reference build as permission to distribute a modified app with those assets. [Upstream asset terms](https://github.com/louis-cfm/coucou/blob/3cc3333203f60f63326ee949b7b86c7549992a1f/LICENSE-ASSETS.md)
 
 **Feature completion rule:** a UI is not a completed feature. An in-scope feature needs working backend behavior, defined failure behavior, persistence/recovery behavior and automated verification. A stateless or purely presentational feature must explicitly explain why persistence is not applicable and verify its relevant accessibility/interaction behavior. Screenshots, fixtures without a real adapter, placeholder responses and optimistic success labels cannot satisfy completion.
 
@@ -52,6 +61,23 @@ This document is the master plan, not a single autonomous implementation assignm
 Use one short branch and one bounded PR for that packet. A large stage may be split into sequential PRs, each with its own completed behavior and gate; do not start the next packet until the prior PR is reviewed, required checks pass and it is integrated. Independent agents may inspect/test or own non-overlapping parts of the current packet. They do not authorize additional stages or concurrent Git mutations.
 
 The PR must link the packet and show behavior, failure/recovery results, automated checks and remaining limitations. A partially completed stage remains pending in the master plan even when one of its packets merges. Release QA and delivery repeat per profile instead of being postponed until every optional feature exists.
+
+## Validation policy — avoid redundant testing
+
+Use the smallest meaningful checks for the change, then expand only at integration/release boundaries or when a failure creates a concrete concern. Measure test/build durations during Stage 2 and organize fast component checks separately from slower native/packaging checks. Do not promise zero debugging or trade truthful capability/recovery verification for speed.
+
+| Change or boundary | Required validation | Avoid |
+|---|---|---|
+| Documentation/planning | Local link/task/scope/whitespace checks | App rebuilds or Codex sessions solely for a prose edit |
+| UI/layout/motion | Affected frontend build/type checks and focused interaction/visual comparison; accessibility checks when behavior changes | Full Codex/GitHub/install matrices for an isolated visual change |
+| Reducer/storage/router | Relevant behavior/failure/replay/migration tests; dependent contract checks | Repeating unchanged manual UI tours |
+| Adapter/protocol/auth/IPC | Sanitized fixture tests and one real integration probe for the changed capability/version/surface | Repeated live-account calls when fixtures cover the unchanged contract |
+| Cross-module or dependency/config change | Affected component checks plus required integration/regression checks | Assuming a narrow unit pass proves an altered boundary |
+| Release candidate | Required automated regression and current packaged artifact's relevant Windows/install/update/uninstall smoke/matrix | Re-running an unchanged passing candidate without new evidence or changes |
+
+Record evidence with commit/component input fingerprint, Codex/OS/dependency versions, command and result. Reuse a passing result only while its relevant code, dependency/config inputs and environment remain valid; do not relabel results from a different artifact/version as a fresh pass. Reuse valid unchanged-component evidence in a later release profile, while testing new capabilities, affected boundaries and the actual new package. Stages 11–12 still issue a distinct acceptance decision for every release.
+
+After a failed check, inspect the error and change the responsible code/environment before rerunning. Do not repeatedly execute the same failing command with unchanged inputs; a suspected transient gets a bounded retry with a recorded reason. Once required checks pass, proceed to review/commit/push. Broaden or repeat only for new changes, failures, protocol/dependency updates, packaging changes or an unresolved risk. Never skip a repository-required check; Stage 2 should scope Windows CI by affected paths, cache dependencies and supersede outdated runs on the same PR without cancelling a release publication in progress.
 
 ## Delivery map
 
@@ -146,9 +172,9 @@ Tasks:
 - [ ] **BASE-02** Install missing Microsoft C++ build tools with Desktop development with C++, a Windows SDK, Rust MSVC toolchain and WebView2. Use Node 22 initially to match upstream CI; pin the validated toolchain after the first successful build.
 - [ ] **BASE-03** Install frontend dependencies using `npm ci` and the checked-in lockfile. Keep dependency upgrades separate from the initial port.
 - [ ] **BASE-04** Build/type-check frontend, run the existing Rust tests and record formatting/lint baseline. Existing failures must be identified and fixed or explicitly tracked before unrelated work begins.
-- [ ] **BASE-05** Run the native Windows development app locally. Verify tray, hidden/compact/expanded/greeting states, settings, sound, startup toggle and file drop. Do not install Claude hooks or enter service keys merely to inspect the baseline UI.
+- [ ] **BASE-05** Run the native Windows development app locally. Verify tray, hidden/compact/expanded/greeting states, settings, sound, startup toggle and file drop; capture the small fixed-DPI visual/motion reference during that same run. Do not install Claude hooks or enter service keys merely to inspect the baseline UI.
 - [ ] **BASE-06** Build the original installer locally to prove NSIS/toolchain readiness. Treat it as a local baseline artifact, not your distributable app.
-- [ ] **BASE-07** Add Windows PR CI for frontend type/build checks and Rust tests. Later require formatting/clippy after recorded upstream issues are resolved.
+- [ ] **BASE-07** Add Windows PR CI for relevant frontend type/build checks and Rust tests, affected-path selection, dependency caches and superseding outdated runs on the same PR. Record durations and separate fast checks from native/package checks; docs-only paths should use document checks. Later require formatting/clippy after recorded upstream issues are resolved. Release workflow cancellation is separate from PR supersession.
 
 Commands run from your development checkout's `windows` directory during implementation:
 
@@ -228,18 +254,18 @@ Current hooks and App Server have distinct contracts and trust/lifecycle require
 Tasks:
 
 - [ ] **SHELL-01** Select final name, repository name, app identifier, storage directories, credential namespace and relay name before durable user data is created.
-- [ ] **SHELL-02** Replace Coucou/Mochi names, protected character artwork/expressions/animations, icons and sounds with original assets. Keep generic interaction semantics and MIT source attribution.
+- [ ] **SHELL-02** Preserve Coucou's generic UI/motion code and MIT attribution while changing product name/app IDs. Record written asset permission if obtained; keep exact protected character artwork/expressions/animations/icons/sounds in distributed builds only if that permission covers them. Otherwise replace those protected assets before release, preserving the surrounding UI and motion behavior.
 - [ ] **SHELL-03** Update Cargo/package/Tauri metadata, tray labels, installer names, icon generator, shared-sound paths, autostart registration and diagnostic paths consistently.
 - [ ] **SHELL-04** Preserve topmost transparency, nonactivation, click-through, hidden wake strip, compact/expanded states and display positioning. Remove unnecessary broad browser-protection overrides.
 - [ ] **SHELL-05** Add fixed-monitor/follow-cursor placement, logical-pixel geometry, edge offset and configurable global shortcut with conflict handling.
 - [ ] **SHELL-06** Make Escape, pointer leave, typing, drag and pinned-request behavior consistent. Cosmetic interactions cannot replace an actionable card.
-- [ ] **SHELL-07** Keep selected greeting, mini-avatar, hover and sound behaviors using original visuals; add mute/reduced-motion options and core settings for MVP. Show the drop affordance only when its real attachment workflow ships in v1. Do not require every inherited expression/emote/sound.
+- [ ] **SHELL-07** Preserve greeting, mini-avatar placement, hover feedback, interaction timing, card transitions and generic island motion; use licensed/original character and sound assets under SHELL-02. Add mute/reduced-motion options and core settings for MVP. Show the drop affordance only when its real attachment workflow ships in v1. Do not remove established UI interactions merely to simplify backend integration.
 - [ ] **SHELL-08** Create a basic history/detail window for MVP session/PR inspection; add long streamed output, diff and approval content in interactive v1.
 - [ ] **SHELL-09** Review every audit entry into `docs/inherited-feature-decisions.md`: keep/adapt/defer/remove, Codex benefit, profile and task IDs. Isolate deferred services and remove dormant controls from production UI, including the MVP control-removal portion of PARITY-13; retain the complete audit as reference.
 
 Files affected include `windows/src/island/*`, `src/core/layout.ts`, `src/mochi/*`, `src/core/sound.ts`, styles/settings/views, `src-tauri/src/island.rs`, `tray.rs`, `settings.rs`, configuration/icons and packaging scripts.
 
-**Done when:** your branded shell runs at multiple DPI scales without stealing focus, blocking unrelated desktop areas or displaying protected upstream assets. Coucou's source and asset licenses have different scope. [Asset license](https://github.com/louis-cfm/coucou/blob/3cc3333203f60f63326ee949b7b86c7549992a1f/LICENSE-ASSETS.md)
+**Done when:** your shell preserves the agreed Coucou layout/motion and runs at multiple DPI scales without stealing focus or blocking unrelated desktop areas. A distributed build uses original assets or recorded written permission for protected assets. Coucou's source and asset licenses have different scope. [Asset license](https://github.com/louis-cfm/coucou/blob/3cc3333203f60f63326ee949b7b86c7549992a1f/LICENSE-ASSETS.md)
 
 ## Stage 5 — Establish backend authority, persistence and request routing
 
@@ -430,7 +456,7 @@ Tasks:
 
 Suggested engineering target: ordinary local event-to-state update under about 250 ms, bounded queues/storage, no network/IPC wait on the render path, no hidden frame loop. These are test targets, not performance claims already achieved.
 
-**Done when:** required automated checks pass and the actual packaged candidate passes the profile's Windows behavior/failure/recovery matrix. Each in-scope feature has real backend, failure, persistence/recovery and test evidence. Preview screenshots alone are insufficient. Record an explicit QA result per release; a previous MVP pass is not a v1 pass.
+**Done when:** required automated checks pass and the actual packaged candidate passes the profile's Windows behavior/failure/recovery matrix. Each in-scope feature has real backend, failure, persistence/recovery and test evidence. Preview screenshots alone are insufficient. Reuse valid unchanged-component evidence under the validation policy, but verify the new/affected behavior and current package. Record an explicit QA result per release; a previous MVP pass is not automatically a v1 pass.
 
 ## Stage 12 — Package, sign, publish, update and uninstall
 
@@ -516,7 +542,7 @@ The root workspace copy of this plan is a convenience mirror. After import, upda
 | Audit catalog | Work covered by this plan |
 |---|---|
 | F01–F28: shell/lifecycle/navigation/settings | Stages 4–6, 9, 11–12 |
-| F29–F43: avatar/motion/sounds | Selected original replacements in Stage 4; remove/defer non-beneficial choreography; accessibility/performance in 11 |
+| F29–F43: avatar/motion/sounds | Preserve generic UI/motion fidelity in Stage 4; exact protected character/sounds require permission, otherwise original replacements; accessibility/performance in 11 |
 | F44–F66: coding hooks/ticker/approvals | Stages 3, 5–6, 8–9 |
 | F67–F72: chat | Stage 8 |
 | F73–F89: files/window/mail/search pieces | Core files in v1; window/mail/search selected as extensions; dormant controls removed from MVP |
@@ -531,7 +557,7 @@ Use the checklist against a declared scope/version. MVP may pass its rows while 
 
 - [x] Your GitHub repository is the development/publication origin; inherited release scripts must have their destination and branding adapted before product releases.
 - [ ] A clean checkout builds and tests reproducibly.
-- [ ] Own identity/assets are used; MIT attribution is retained.
+- [ ] Own identity and original/permitted assets are used; MIT attribution is retained and Coucou UI/motion fidelity is verified.
 - [ ] MVP: the original Windows island, tray, settings, startup, hotkey and basic history/detail panel work.
 - [ ] Multiple Codex sessions/subagents remain independent and survive UI reloads.
 - [ ] MVP: supported observing/navigation capabilities pass the Stage 3 gate; unsupported interactive controls are absent/disabled.
