@@ -44,9 +44,11 @@ This documentation-only packet on `docs/release-scope-and-gates` incorporates th
 - Use the audit as a complete reference while recording inherited features as keep/adapt/defer/remove; do not require unrelated Coucou parity.
 - Repeat QA/delivery Stages 11–12 per release profile/version; interactive v1 completes the core project.
 
-Changed files: implementation plan, stage packet template, project README, AGENTS.md and this ledger. Application sources, assets, dependencies and build workflows remain untouched. The root workspace plan is a synchronized convenience mirror. Publication and documentation-check evidence are recorded after verification; all implementation stages remain pending.
+Changed files: implementation plan, stage packet template, project README, AGENTS.md and this ledger. Application sources, assets, dependencies and build workflows remain untouched. The root workspace plan is a synchronized convenience mirror; all implementation stages remain pending.
 
-Revision checks: 13 master stages, 120 unique task IDs, 13 valid local links across the five changed documents, paired code fences and required scope/gate sections verified. A read-only agent reviewed all seven feedback items and identified one unconditional review-monitoring gate; it was changed to require CI for MVP and reviews only when in scope for v1. Whitespace/staged-file checks are run again before publication. No application builds/runtime tests were run for this documentation-only change.
+Revision checks: 13 master stages, 120 unique task IDs, 13 valid local links across the five changed documents, paired code fences and required scope/gate sections verified. A read-only agent reviewed all seven feedback items and identified one unconditional review-monitoring gate; it was changed to require CI for MVP and reviews only when in scope for v1. Whitespace/staged-file checks passed before publication. No local application builds/runtime tests were run for this documentation-only change.
+
+Published revision commit: [`c1f42f3c28a253a4b9fca434fb095e60381c2e3e`](https://github.com/YashwanthDevelops/Anti-Scrolling-Notch/commit/c1f42f3c28a253a4b9fca434fb095e60381c2e3e) on `origin/docs/release-scope-and-gates`; `git ls-remote` confirmed the same full SHA. [PR #1](https://github.com/YashwanthDevelops/Anti-Scrolling-Notch/pull/1) contains this bounded documentation packet and the validation report. At this checkpoint the inherited macOS Build workflow was running; no Windows CI result or merged status is claimed. This subsequent ledger commit records the verified publication without embedding its own hash. Final PR/merge state is verified separately in GitHub/session output.
 
 ## Rules for later entries
 
