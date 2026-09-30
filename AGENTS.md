@@ -6,10 +6,10 @@
 
 - This is YashwanthDevelops/Anti-Scrolling-Notch, a Windows Codex companion based on Coucou's Windows source. The implementation plan is `docs/implementation-plan.md`; actual progress is `docs/execution-ledger.md`.
 - Read the relevant upstream instructions and module code, but follow the user's approved Windows/Codex scope and original product identity. Keep the macOS source as reference unless explicitly assigned work there.
-- Preserve MIT attribution and the separate asset-license notice. Use original product name/app IDs; protected character/icon/sounds require written permission covering distribution or original replacements before release.
+- Preserve MIT attribution and the separate asset-license notice. Keep project/runtime IDs separate from inherited visuals. Initially retain Coucou/Mochi visual assets and animation behavior for development/prototyping as replaceable inherited assets. Before any public/distributable release, perform the explicit asset/license review and obtain appropriate rights or replace affected assets with original ones (REL-11).
 - Do not imply that inherited Claude/Coucou source is already implemented for Codex. Mark capabilities and validation truthfully.
 - Coucou is the foundation, not a mandatory parity specification. Record inherited features as keep/adapt/defer/remove according to their Codex benefit and release profile. Deferred services/controls must remain inactive.
-- The user explicitly wants Coucou's UI and animations preserved. Keep the island layout, generic motion/transitions, timing and interaction behavior; adapt data/labels/backend without an unsolicited redesign. Exact Mochi character artwork/expressions/animations remain subject to the separate asset terms.
+- The user explicitly wants the existing Coucou UI and animations, including Mochi visuals, retained initially. Keep layout, character expressions/animations, sounds, transitions, timing and interaction behavior for the development prototype; adapt Codex data/backend without redesigning. Treat assets as replaceable resources. New UI work requires a later user request; release asset clearance is a separate gate, not a reason to redesign during development.
 
 ## Bounded execution and completion
 
@@ -43,4 +43,4 @@
 - Keep observing hooks fast and neutral. Approvals need an explicit user decision, exact request routing and bounded fallback. Respect Codex's hook review/trust flow.
 - Existing-session monitoring and companion-managed App Server control have different capabilities. Do not invent unsupported desktop APIs or deep links.
 - Keep service secrets backend-only and OS-protected. Use typed commands/argument arrays, redacted diagnostics and bounded state/history.
-- Inspect inherited release destinations and replace identities/assets before release tags or publishers are used.
+- Inspect inherited release destinations and complete runtime identity plus REL-11 asset rights/replacement clearance before public release tags, downloadable artifacts or publishers are used.

@@ -1,6 +1,6 @@
 # Anti-Scrolling-Notch — Windows Codex implementation plan
 
-Updated 1 October 2026. This revision incorporates the supplied execution and release-scope feedback. The audited source and planning baseline have been committed and pushed to your repository; application builds and feature implementation remain pending. Verified planning checkpoint: `60b063f5f184bba236af58b3c0290e0ca3d016ef` on `main`.
+Updated 1 October 2026. This revision adopts the user's retained-Coucou-UI development direction, with asset review separated from prototyping. The audited source and planning baseline have been committed and pushed to your repository; application builds and feature implementation remain pending. Verified prior planning checkpoint: `9abeed3474cdc514de0b8088398bef42e61cc8ff` on `main`.
 
 Build from Coucou's existing Windows project. Use it as the implementation/reference foundation for Anti-Scrolling-Notch for Codex. Keep interactions that help Codex users, adapt their behavior to Codex, and remove or defer the rest. This master specification covers source import through maintenance; execute it through one bounded stage/PR at a time.
 
@@ -20,15 +20,15 @@ The earlier [repository audit](coucou-analysis.md) defines 124 catalog entries a
 | Execution policy | One active stage packet and one active implementation PR at a time; review and integrate it before starting dependent work. |
 | Agent policy | Agents may work on independent modules; the coordinating agent owns integration, staging, commits and pushes. |
 | Initial platform | Windows 11 x64; additional Windows/ARM64 support only after testing. |
-| App stack | Tauri 2, Rust, TypeScript/Vite, Canvas avatar under the asset-permission/fallback policy, WebView2. |
-| UI direction | Preserve Coucou's island layout, visual hierarchy, generic motion/transition code and interaction timing. Adapt backend wiring and Codex labels without an unsolicited redesign. Exact protected character/assets require written permission before distribution. |
+| App stack | Tauri 2, Rust, TypeScript/Vite, inherited Coucou/Mochi Canvas renderer and replaceable assets, WebView2. |
+| UI direction | Initially retain Coucou's existing UI, Mochi visuals/expressions/animations, icons, sounds, layout and interaction timing for development/prototyping. Adapt Codex data/backend wiring. Redesign only if the user later requests it. |
 | Runtime | Per-user tray app; no Windows service or administrator requirement. |
 | Existing Codex sessions | Trusted hook monitoring; supported controls enabled only after compatibility tests. |
 | Interactive Ask | Companion-managed Codex App Server sessions using stdio. |
 | Existing desktop session control | Optional extension, disabled until passive attachment and arbitration are proven. |
 | Persistent state | Migrated preferences, bounded SQLite event/history data, OS-protected credentials. |
 | GitHub | Read-first PR/review/check monitoring with conditional polling; optional hosted webhooks later. |
-| Branding | Own name/app IDs; retain upstream MIT attribution. Use protected character/icon/sounds only with written permission covering the release, otherwise original replacements that preserve the surrounding UI and generic motion. |
+| Branding | Own project/runtime IDs and upstream attribution. Retain inherited visual assets during development as replaceable resources; review rights and clear or replace affected assets before any public/distributable build. |
 
 ## Release scopes and inherited-feature decisions
 
@@ -40,15 +40,19 @@ The earlier [repository audit](coucou-analysis.md) defines 124 catalog entries a
 
 MVP does not depend on managed chat, attachment transport or optional services. Monitor approvals/questions may show a waiting indicator and a verified route back to Codex, but interactive controls remain out of the MVP scope. Hidden or disabled inherited controls must explain the supported alternative where useful. Interactive v1 is the complete core product; deferred extensions do not block it.
 
-Coucou is the visual and workflow reference, with UI fidelity now an explicit user requirement. Review all 124 audit entries and record **keep / adapt / defer / remove** with the Codex benefit, release profile and task IDs in `docs/inherited-feature-decisions.md` during Stage 4. Keep the island layout, visual hierarchy, expansion/collapse motion, hover/drag/keyboard behavior, tickers and card transitions; adapt their data/events to Codex. Character artwork/expressions/animations, icons and sounds follow the separate asset-permission gate below. Account statistics and unrelated services remain scheduled extensions rather than MVP/v1 requirements. Deferred source may remain isolated as reference, but it must not expose misleading UI, start networking or run unused background loops in shipped builds.
+Coucou is the visual and workflow reference, with retaining its existing UI and animations an explicit user requirement. Review all 124 audit entries and record **keep / adapt / defer / remove** with the Codex benefit, release profile and task IDs in `docs/inherited-feature-decisions.md` during Stage 4. Initially retain the character artwork/expressions/animations, icons, sounds, island layout, visual hierarchy, expansion/collapse motion, hover/drag/keyboard behavior, tickers and card transitions; adapt their data/events to Codex. Treat inherited visual/audio resources as replaceable assets and apply the separate review gate before distribution. Account statistics and unrelated services remain scheduled extensions rather than MVP/v1 requirements. Deferred source may remain isolated as reference, but it must not expose misleading UI, start networking or run unused background loops in shipped builds.
 
 The plan accounts for every audited Coucou feature, but it does not promise every feature in the first release or pretend prototypes/placeholders already work. The core targets Codex coding sessions on verified CLI/desktop surfaces. A companion-managed App Server chat is distinct from passive monitoring of an existing desktop chat; controlling an already-running desktop conversation requires the separately verified attachment/arbitration capability. General ChatGPT conversations are not automatically included in this Codex contract.
 
-### Preserve the UI while adapting the integration
+### Retain Coucou's UI and assets for development/prototyping
 
-Keep existing layout/components and generic motion infrastructure wherever practical. During the Stage 2 baseline run, capture a small reference set of compact/expanded/greeting/settings/drop states and key transition timings at a fixed DPI. Reuse it for focused comparisons when affected components change; do not repeatedly redesign or revalidate the whole interface for backend-only work. The priority is a Coucou-like experience with accurate Codex data and controls.
+**Initially retain Coucou/Mochi visual assets and animation behavior for development/prototyping. Treat them as replaceable inherited assets. Before any public/distributable release, perform an explicit asset/license review and either obtain appropriate rights or replace the affected assets with original ones.**
 
-The source license permits code reuse; `LICENSE-ASSETS.md` separately restricts distributing the Coucou/Mochi names, character design/expressions/animations, icons and sounds. Exact protected visuals/sounds are a release option only after written permission covering their use is recorded. Original replacements are the fallback before distribution, while retaining the surrounding island UI and generic motion. The original local baseline remains a reference. Do not treat the existing source import or a personal reference build as permission to distribute a modified app with those assets. [Upstream asset terms](https://github.com/louis-cfm/coucou/blob/3cc3333203f60f63326ee949b7b86c7549992a1f/LICENSE-ASSETS.md)
+Keep the existing Coucou layout/components, Mochi renderer/expressions/animations, sounds and motion infrastructure during the initial prototype. Backend/session integration must not become a UI rewrite. Separate asset references/theme configuration from Codex adapters so any later licensed/original replacement does not require rebuilding the workflow. A new UI is later user-directed work if the user dislikes the retained experience, rather than a prerequisite for development.
+
+During the Stage 2 baseline run, capture a small reference set of compact/expanded/greeting/settings/drop states and key transition timings at a fixed DPI. Reuse it for focused comparisons when affected components change; do not repeatedly redesign or revalidate the whole interface for backend-only work. The initial visual target is Coucou as it exists, with accurate Codex data and supported controls.
+
+`LICENSE` and `LICENSE-ASSETS.md` retain their upstream meanings. Development retention does not grant distribution rights. Stage 12 REL-11 must inventory the inherited names/artwork/character animations/icons/sounds/media and record appropriate rights or completed replacements before any public/distributable release, including beta installers and downloadable CI artifacts. A permission/replacement decision may affect protected assets without requiring a wholesale layout/interaction redesign. [Upstream asset terms](https://github.com/louis-cfm/coucou/blob/3cc3333203f60f63326ee949b7b86c7549992a1f/LICENSE-ASSETS.md)
 
 **Feature completion rule:** a UI is not a completed feature. An in-scope feature needs working backend behavior, defined failure behavior, persistence/recovery behavior and automated verification. A stateless or purely presentational feature must explicitly explain why persistence is not applicable and verify its relevant accessibility/interaction behavior. Screenshots, fixtures without a real adapter, placeholder responses and optimistic success labels cannot satisfy completion.
 
@@ -86,7 +90,7 @@ After a failed check, inspect the error and change the responsible code/environm
 | 1 | Import Coucou into your existing repository and publish this plan | Existing GitHub repository and Git |
 | 2 | Reproducible upstream Windows baseline | 1 |
 | 3 | Hard capability gate for the selected release profile | 2 |
-| 4 | Own product identity and Windows shell | 2, identity decision |
+| 4 | Runtime identity, retained Coucou UI and replaceable asset boundary | 2 |
 | 5 | Authoritative broker, storage and request routing | 3, 4 |
 | 6 | Reliable monitoring of existing Codex sessions | 3, 5 |
 | 7 | Useful local Git and GitHub workflow cards | 5, 6 |
@@ -104,7 +108,7 @@ Stage 9 has two sequential scopes, not two new master stages. Stages 6–7 plus 
 flowchart LR
     A[Clone Coucou and publish to your repository] --> B[Build baseline]
     B --> C[Codex compatibility probes]
-    B --> D[Own identity and Windows shell]
+    B --> D[Retained Coucou UI and runtime identity]
     C --> E[Broker and request router]
     D --> E
     E --> F[Existing-session monitor]
@@ -249,23 +253,23 @@ Current hooks and App Server have distinct contracts and trust/lifecycle require
 
 **Done when:** every capability in the selected profile satisfies all four gate conditions, backend and UI enforce the registry, and unsupported capabilities have tested fallbacks. Deferred v1/extension probes remain pending without blocking a verified MVP. Core delivery cannot depend on unproven shared-desktop access.
 
-## Stage 4 — Create your identity and preserve the Windows shell
+## Stage 4 — Retain Coucou's UI and isolate replaceable assets
 
 Tasks:
 
 - [ ] **SHELL-01** Select final name, repository name, app identifier, storage directories, credential namespace and relay name before durable user data is created.
-- [ ] **SHELL-02** Preserve Coucou's generic UI/motion code and MIT attribution while changing product name/app IDs. Record written asset permission if obtained; keep exact protected character artwork/expressions/animations/icons/sounds in distributed builds only if that permission covers them. Otherwise replace those protected assets before release, preserving the surrounding UI and motion behavior.
-- [ ] **SHELL-03** Update Cargo/package/Tauri metadata, tray labels, installer names, icon generator, shared-sound paths, autostart registration and diagnostic paths consistently.
+- [ ] **SHELL-02** Initially retain Coucou/Mochi visual assets and animation behavior for development/prototyping. Treat them as replaceable inherited assets. Before any public/distributable release, perform an explicit asset/license review and either obtain appropriate rights or replace the affected assets with original ones. Track development retention separately from the Stage 12 REL-11 distribution gate; do not require replacement or redesign to begin integration.
+- [ ] **SHELL-03** Separate Cargo/package/Tauri runtime identifiers, ownership, autostart registration and diagnostic paths consistently. Retain inherited visual/icon/sound resources for the development prototype; prepare replaceable resource references without recreating them. Final public branding/artifact resources follow REL-11 before distribution.
 - [ ] **SHELL-04** Preserve topmost transparency, nonactivation, click-through, hidden wake strip, compact/expanded states and display positioning. Remove unnecessary broad browser-protection overrides.
 - [ ] **SHELL-05** Add fixed-monitor/follow-cursor placement, logical-pixel geometry, edge offset and configurable global shortcut with conflict handling.
 - [ ] **SHELL-06** Make Escape, pointer leave, typing, drag and pinned-request behavior consistent. Cosmetic interactions cannot replace an actionable card.
-- [ ] **SHELL-07** Preserve greeting, mini-avatar placement, hover feedback, interaction timing, card transitions and generic island motion; use licensed/original character and sound assets under SHELL-02. Add mute/reduced-motion options and core settings for MVP. Show the drop affordance only when its real attachment workflow ships in v1. Do not remove established UI interactions merely to simplify backend integration.
+- [ ] **SHELL-07** Retain the existing Mochi appearance/expressions/animations, greeting, mini-avatar placement, hover feedback, sounds, timing, card transitions and island motion during development under SHELL-02. Add mute/reduced-motion options and core settings for MVP. Show active drop/send controls only when their real attachment workflow ships in v1. Do not redesign or remove established UI interactions merely to simplify backend integration.
 - [ ] **SHELL-08** Create a basic history/detail window for MVP session/PR inspection; add long streamed output, diff and approval content in interactive v1.
 - [ ] **SHELL-09** Review every audit entry into `docs/inherited-feature-decisions.md`: keep/adapt/defer/remove, Codex benefit, profile and task IDs. Isolate deferred services and remove dormant controls from production UI, including the MVP control-removal portion of PARITY-13; retain the complete audit as reference.
 
 Files affected include `windows/src/island/*`, `src/core/layout.ts`, `src/mochi/*`, `src/core/sound.ts`, styles/settings/views, `src-tauri/src/island.rs`, `tray.rs`, `settings.rs`, configuration/icons and packaging scripts.
 
-**Done when:** your shell preserves the agreed Coucou layout/motion and runs at multiple DPI scales without stealing focus or blocking unrelated desktop areas. A distributed build uses original assets or recorded written permission for protected assets. Coucou's source and asset licenses have different scope. [Asset license](https://github.com/louis-cfm/coucou/blob/3cc3333203f60f63326ee949b7b86c7549992a1f/LICENSE-ASSETS.md)
+**Done when:** the development shell retains Coucou's agreed appearance/animation behavior, has separate runtime identity and replaceable asset references, and runs at multiple DPI scales without stealing focus or blocking unrelated desktop areas. Asset replacement is not a development prerequisite. Distribution remains gated on REL-11; no rights are assumed from this development milestone. [Asset license](https://github.com/louis-cfm/coucou/blob/3cc3333203f60f63326ee949b7b86c7549992a1f/LICENSE-ASSETS.md)
 
 ## Stage 5 — Establish backend authority, persistence and request routing
 
@@ -327,7 +331,7 @@ windows/
     views/                      sessions, PRs, approvals, chat, drop
     detail/                     long output/diff/history
     settings/                   onboarding and configuration
-    avatar/                     original procedural rendering
+    mochi/                      retained renderer/animation; replaceable asset references
   tests/fixtures/               sanitized protocol/event fixtures
 ```
 
@@ -472,12 +476,13 @@ Tasks:
 - [ ] **REL-06** Implement in-app Disconnect/remove-owned-hooks plus optional history/files/credential cleanup. Uninstall must not rewrite unrelated Codex configuration or recursively remove paths outside verified app directories.
 - [ ] **REL-07** Test uninstall and a removed/missing relay against supported Codex releases; leave no broken startup task or unexplained active hook entry.
 - [ ] **REL-08** Add release CI scoped to your repository with version checks, quality gates, protected signing, installer/artifact generation and checksums.
-- [ ] **REL-09** Write README/onboarding, permissions/data explanation, supported capability/version table, troubleshooting and real screenshots/video using your assets. State polling latency and terminal/shared-desktop limitations honestly.
+- [ ] **REL-09** Write README/onboarding, permissions/data explanation, supported capability/version table, troubleshooting and real screenshots/video using release-cleared assets. State polling latency and terminal/shared-desktop limitations honestly.
 - [ ] **REL-10** Publish the monitor MVP beta to your own GitHub releases after its Stages 11–12 gates pass; collect opt-in feedback and fix blockers. Publish interactive v1.0 only after its separate candidate and delivery gates pass. Clearly document deferred extensions.
+- [ ] **REL-11** Before any public/distributable release, including beta/shared installers, updater payloads and downloadable CI artifacts, perform an explicit asset/license review. Inventory inherited names, artwork, character expressions/animations, icons, sounds and media; record appropriate rights or verify original replacements for every affected asset. Keep upstream attribution/notices. Publish only after this gate passes; asset changes need focused validation, not an automatic UI redesign.
 
 Release contents: signed installer, versioned app/relay, updater payload and signatures/metadata, checksums, release notes, supported-version matrix and installation/troubleshooting guide. A rolling download alias is optional; it is not itself an updater. Tauri verifies signed update artifacts and expects the signature content in update metadata. [Tauri updater guidance](https://v2.tauri.app/plugin/updater/)
 
-**Done when:** a clean machine can install, configure, use, update and uninstall the declared released profile through documented steps, without corrupting Codex configuration or misrepresenting capabilities. Record release/signature/artifact evidence for that exact version. Both Stages 11 and 12 must pass before marking the profile delivered.
+**Done when:** a clean machine can install, configure, use, update and uninstall the declared released profile through documented steps, without corrupting Codex configuration or misrepresenting capabilities. REL-11 rights/replacement evidence must pass before distribution. Record release/signature/artifact evidence for that exact version. Both Stages 11 and 12 must pass before marking the profile delivered.
 
 ## Stage 13 — Maintain the released product
 
@@ -512,7 +517,7 @@ Recommended packet/PR order (split a stage further if its review would be too la
 
 1. Stage 2: Windows baseline, development evidence and required Windows CI.
 2. Stage 3 MVP scope: observing/navigation/Windows probes and enforced capability registry.
-3. Stage 4: own identity/assets, shell/settings/basic history window and inherited-feature decisions.
+3. Stage 4: retained Coucou UI/assets, runtime identity and replaceable asset boundary, settings/basic history window and inherited-feature decisions.
 4. Stage 5: backend authority, model/reducer/replay/storage/request contracts.
 5. Stage 6: Codex relay, previewable hook installer and independent session monitoring.
 6. Stage 7 MVP scope: Git/worktree resolver and GitHub PR/CI scheduler/cards.
@@ -542,7 +547,7 @@ The root workspace copy of this plan is a convenience mirror. After import, upda
 | Audit catalog | Work covered by this plan |
 |---|---|
 | F01–F28: shell/lifecycle/navigation/settings | Stages 4–6, 9, 11–12 |
-| F29–F43: avatar/motion/sounds | Preserve generic UI/motion fidelity in Stage 4; exact protected character/sounds require permission, otherwise original replacements; accessibility/performance in 11 |
+| F29–F43: avatar/motion/sounds | Retain Coucou/Mochi assets and behavior for development in Stage 4; explicit rights/replacement gate in REL-11 before distribution; accessibility/performance in 11 |
 | F44–F66: coding hooks/ticker/approvals | Stages 3, 5–6, 8–9 |
 | F67–F72: chat | Stage 8 |
 | F73–F89: files/window/mail/search pieces | Core files in v1; window/mail/search selected as extensions; dormant controls removed from MVP |
@@ -557,7 +562,8 @@ Use the checklist against a declared scope/version. MVP may pass its rows while 
 
 - [x] Your GitHub repository is the development/publication origin; inherited release scripts must have their destination and branding adapted before product releases.
 - [ ] A clean checkout builds and tests reproducibly.
-- [ ] Own identity and original/permitted assets are used; MIT attribution is retained and Coucou UI/motion fidelity is verified.
+- [ ] Development retains Coucou's UI/visual assets/animation behavior as replaceable resources; runtime identity and upstream attribution remain correct.
+- [ ] Before any public/distributable build, REL-11 verifies asset/license review and appropriate rights or completed original replacements.
 - [ ] MVP: the original Windows island, tray, settings, startup, hotkey and basic history/detail panel work.
 - [ ] Multiple Codex sessions/subagents remain independent and survive UI reloads.
 - [ ] MVP: supported observing/navigation capabilities pass the Stage 3 gate; unsupported interactive controls are absent/disabled.
