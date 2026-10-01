@@ -47,8 +47,8 @@ The current user's startup registration and settings were not exercised at runti
 
 ## Published validation — 1 October 2026
 
-Implementation commit `c7dc5fb09f39cce2f8b33f71688bae5ae023ddf7` is pushed to `origin/work/stage-4-runtime-identity`, and the remote branch SHA matched. [PR #11](https://github.com/YashwanthDevelops/Anti-Scrolling-Notch/pull/11) is open against `main` and remains unmerged at this packet boundary. [Windows CI run 28](https://github.com/YashwanthDevelops/Anti-Scrolling-Notch/actions/runs/36889500973) passed scope, frontend, documentation and Rust workspace jobs; inherited [Build run 37](https://github.com/YashwanthDevelops/Anti-Scrolling-Notch/actions/runs/36889500988) also passed. SHELL-01–03 are complete on the packet branch; SHELL-04 onward and all later stages remain pending.
+Implementation commit `c7dc5fb09f39cce2f8b33f71688bae5ae023ddf7` was pushed to `origin/work/stage-4-runtime-identity`. [PR #11](https://github.com/YashwanthDevelops/Anti-Scrolling-Notch/pull/11) passed its required Windows CI and inherited Build checks, was approved by the project owner, and was merged. Merge commit `44b15a1fad0d6923a3241693a04307108ddb7311` is verified as `origin/main`; the worktree was clean after integration. SHELL-01–03 are complete. Later tasks remain outside this packet.
 
 ## PR and completion gate
 
-Review the staged diff for accidental edits to asset bytes, user data, hooks, credentials, startup state, generated artifacts or later-stage code. Commit and push each completed coherent change. The packet stops after its PR is validated and published; no later packet starts until this PR is reviewed and integrated.
+The packet's implementation PR is integrated. This closeout corrects only the stale PR/integration status; it changes no product source, asset bytes, user data, hooks, credentials, startup state, generated artifacts or later-stage code. It does not activate a later packet.
