@@ -176,5 +176,9 @@ jobs:
       - name: Build the hook resource required by the Tauri build script
         run: cargo build --release -p coucou-hook
 
+      - name: Replay captured Codex hook transport and neutral fallback
+        shell: pwsh
+        run: pwsh -NoProfile -File scripts/test-codex-hook-transport.ps1
+
       - name: Run locked Rust workspace tests
         run: cargo test --workspace --locked

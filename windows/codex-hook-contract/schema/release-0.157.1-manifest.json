@@ -1,0 +1,60 @@
+{
+  "installed_cli_version": "0.157.1",
+  "installed_surface": "Codex CLI command hooks",
+  "source_repository": "https://github.com/openai/codex",
+  "source_tag": "rust-v0.157.1",
+  "source_commit": "36650394c5b38c2990ccf2a3457165ca3e9d9726",
+  "source_schema_directory": "codex-rs/hooks/schema/generated",
+  "source_license": "Apache-2.0",
+  "source_license_git_blob_sha1": "4606e72e042564097e8780d66c1d4dcb611869bd",
+  "source_notice_git_blob_sha1": "2805899d56d0332d175cfc613c67d45d6f006db7",
+  "available_input_schemas": [
+    "interrupt.command.input.schema.json",
+    "permission-request.command.input.schema.json",
+    "post-compact.command.input.schema.json",
+    "post-tool-use.command.input.schema.json",
+    "pre-compact.command.input.schema.json",
+    "pre-tool-use.command.input.schema.json",
+    "session-end.command.input.schema.json",
+    "session-start.command.input.schema.json",
+    "stop.command.input.schema.json",
+    "subagent-start.command.input.schema.json",
+    "subagent-stop.command.input.schema.json",
+    "user-prompt-submit.command.input.schema.json"
+  ],
+  "available_output_schemas": [
+    "interrupt.command.output.schema.json",
+    "permission-request.command.output.schema.json",
+    "post-compact.command.output.schema.json",
+    "post-tool-use.command.output.schema.json",
+    "pre-compact.command.output.schema.json",
+    "pre-tool-use.command.output.schema.json",
+    "session-start.command.output.schema.json",
+    "stop.command.output.schema.json",
+    "subagent-start.command.output.schema.json",
+    "subagent-stop.command.output.schema.json",
+    "user-prompt-submit.command.output.schema.json"
+  ],
+  "adapter_input_schemas": [
+    {
+      "file": "session-start.command.input.schema.json",
+      "git_blob_sha1": "70eb76ec923c321b95d225812e16d4e7f52a9cc2",
+      "sha256": "54168cf0bb3641bbc55dcdc58aa3803651d4f24499339061f3e9bb0ef9095633"
+    },
+    {
+      "file": "user-prompt-submit.command.input.schema.json",
+      "git_blob_sha1": "6a10a9f75c19720b0863d11d7d7d80f190e8eacd",
+      "sha256": "e6b923bc519896197c44c4fc267a9d115cef24ac418dde9c27db699f4e3b65fd"
+    },
+    {
+      "file": "stop.command.input.schema.json",
+      "git_blob_sha1": "dbd4a3f648071bee1af24758e9596e11ab78c782",
+      "sha256": "7db4793c404b5c46b230c27b9507eb1a558fd958689d8715221c5dd81351a06a"
+    },
+    {
+      "file": "session-end.command.input.schema.json",
+      "git_blob_sha1": "de87f368726375e8a0732466f6ea6a431ff5b324",
+      "sha256": "23b1b69f92fa8ac29f8319478984b5aa5aaf09e5ca355ce90aa010452937e41c"
+    }
+  ]
+}

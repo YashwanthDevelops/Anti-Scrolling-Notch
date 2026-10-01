@@ -1,2 +1,5 @@
 docs/** linguist-documentation
 design/** linguist-documentation
+windows/codex-hook-contract/schema/rust-v0.157.1/*.json text eol=lf
+windows/codex-hook-contract/schema/rust-v0.157.1/LICENSE text eol=lf
+windows/codex-hook-contract/schema/rust-v0.157.1/NOTICE text eol=lf

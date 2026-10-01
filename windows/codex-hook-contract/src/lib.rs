@@ -11,45 +11,7 @@ pub const WIRE_VERSION: u8 = 1;
 pub const MAX_HOOK_INPUT_BYTES: usize = 1 << 20;
 pub const MAX_WIRE_BYTES: usize = 256;
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub enum CodexHookEvent {
-    #[serde(rename = "SessionStart")]
-    SessionStart,
-    #[serde(rename = "UserPromptSubmit")]
-    UserPromptSubmit,
-    #[serde(rename = "Stop")]
-    Stop,
-    #[serde(rename = "SessionEnd")]
-    SessionEnd,
-}
-
-impl CodexHookEvent {
-    pub const VERIFIED: [Self; 4] = [
-        Self::SessionStart,
-        Self::UserPromptSubmit,
-        Self::Stop,
-        Self::SessionEnd,
-    ];
-
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::SessionStart => "SessionStart",
-            Self::UserPromptSubmit => "UserPromptSubmit",
-            Self::Stop => "Stop",
-            Self::SessionEnd => "SessionEnd",
-        }
-    }
-
-    fn parse(value: &str) -> Option<Self> {
-        match value {
-            "SessionStart" => Some(Self::SessionStart),
-            "UserPromptSubmit" => Some(Self::UserPromptSubmit),
-            "Stop" => Some(Self::Stop),
-            "SessionEnd" => Some(Self::SessionEnd),
-            _ => None,
-        }
-    }
-}
+include!(concat!(env!("OUT_DIR"), "/codex_hook_event.rs"));
 
 /// App-internal wire message. It carries only a verified event discriminator;
 /// it is not a Codex hook input/output schema and cannot carry hook decisions.
@@ -115,6 +77,37 @@ pub fn parse_wire_message(raw: &[u8]) -> Result<CodexHookObservation, ParseError
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::{fs, path::Path};
+
+    #[test]
+    fn generated_event_type_matches_the_accepted_runtime_capture() {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let fixture = fs::read_to_string(
+            repo_root.join("tests/compat/codex-hooks/captured-projections.jsonl"),
+        )
+        .expect("read accepted sanitized hook projection");
+        let captured = fixture
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| {
+                serde_json::from_str::<serde_json::Value>(line).unwrap()["hook_event_name"]
+                    .as_str()
+                    .unwrap()
+                    .to_owned()
+            })
+            .collect::<Vec<_>>();
+        let generated = CodexHookEvent::VERIFIED
+            .iter()
+            .map(|event| event.as_str().to_owned())
+            .collect::<Vec<_>>();
+
+        assert_eq!(generated, captured);
+        assert_eq!(CODEX_HOOK_SCHEMA_CLI_VERSION, "0.157.1");
+        assert_eq!(
+            CODEX_HOOK_SCHEMA_SOURCE_COMMIT,
+            "36650394c5b38c2990ccf2a3457165ca3e9d9726"
+        );
+    }
 
     #[test]
     fn accepts_only_the_four_loopback_observed_event_names() {
