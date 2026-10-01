@@ -87,10 +87,17 @@ foreach ($case in $cases) {
     Write-Output "PASS $($case.Name): isolated pipe delivery, allowlisted fields, neutral exit"
 }
 
-# An event that was configured in the probe but never observed, and malformed
-# stdin, must both fail neutral before opening the backend pipe.
+# Events configured in the probe but never observed, and malformed stdin,
+# must fail neutral before opening the backend pipe.
 $negativeCases = @(
     @{ Name = 'unverified PreToolUse'; Payload = '{"hook_event_name":"PreToolUse"}' },
+    @{ Name = 'unverified PostToolUse'; Payload = '{"hook_event_name":"PostToolUse"}' },
+    @{ Name = 'unverified PreCompact'; Payload = '{"hook_event_name":"PreCompact"}' },
+    @{ Name = 'unverified PostCompact'; Payload = '{"hook_event_name":"PostCompact"}' },
+    @{ Name = 'unverified SubagentStart'; Payload = '{"hook_event_name":"SubagentStart"}' },
+    @{ Name = 'unverified SubagentStop'; Payload = '{"hook_event_name":"SubagentStop"}' },
+    @{ Name = 'unverified Interrupt'; Payload = '{"hook_event_name":"Interrupt"}' },
+    @{ Name = 'unverified PermissionRequest'; Payload = '{"hook_event_name":"PermissionRequest"}' },
     @{ Name = 'malformed JSON'; Payload = 'not-json' }
 )
 foreach ($case in $negativeCases) {
@@ -121,13 +128,15 @@ if ($existingPipe) {
     Write-Output 'SKIP absent-app bound: the app currently owns the Codex pipe.'
 }
 else {
-    $clock = [System.Diagnostics.Stopwatch]::StartNew()
-    $process = Start-HookProcess '{"hook_event_name":"SessionStart"}'
-    Assert-NeutralExit $process
-    $clock.Stop()
-    if ($clock.ElapsedMilliseconds -gt 1800) {
-        throw "Absent-app relay exceeded its 1800 ms bound: $($clock.ElapsedMilliseconds) ms."
+    foreach ($case in $cases) {
+        $clock = [System.Diagnostics.Stopwatch]::StartNew()
+        $process = Start-HookProcess $case.Payload
+        Assert-NeutralExit $process
+        $clock.Stop()
+        if ($clock.ElapsedMilliseconds -gt 1800) {
+            throw "Absent-app relay for $($case.Name) exceeded its 1800 ms bound: $($clock.ElapsedMilliseconds) ms."
+        }
+        $process.Dispose()
+        Write-Output "PASS absent-app $($case.Name): neutral success in $($clock.ElapsedMilliseconds) ms"
     }
-    $process.Dispose()
-    Write-Output "PASS absent-app bound: neutral success in $($clock.ElapsedMilliseconds) ms"
 }
