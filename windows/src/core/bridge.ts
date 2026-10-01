@@ -25,15 +25,35 @@ export interface BootInfo {
   settings: Settings;
   /** Logical screen rect of the monitor the island lives on. */
   screen: { x: number; y: number; width: number; height: number; scale: number };
+  monitors: MonitorOption[];
+  shortcutStatus: ToggleShortcutStatus;
   version: string;
   hookPath: string;
   capabilities: import("./capability-guard.js").CapabilityRegistry;
+}
+
+export interface MonitorOption {
+  id: string;
+  label: string;
+  scale: number;
+}
+
+export interface ToggleShortcutStatus {
+  active: string | null;
+  error: string | null;
 }
 
 export const Bridge = {
   boot: () => call<BootInfo>("boot"),
 
   saveSettings: (settings: Settings) => call<void>("save_settings", { settings }),
+
+  monitorOptions: () => call<MonitorOption[]>("monitor_options"),
+
+  setToggleShortcut: (shortcut: string) =>
+    callOrThrow<ToggleShortcutStatus>("set_toggle_shortcut", { shortcut }),
+
+  setFileDragActive: (active: boolean) => call<void>("set_file_drag_active", { active }),
 
   /** Shrink the window down to the invisible wake strip (hidden) or back to full. */
   setCollapsed: (collapsed: boolean) => call<void>("set_collapsed", { collapsed }),
@@ -152,7 +172,9 @@ export type BridgeEvent =
   | { name: "cursor"; payload: { x: number; y: number } }
   | { name: "tray"; payload: string }
   | { name: "hook"; payload: Record<string, unknown> }
-  | { name: "screen-changed"; payload: null };
+  | { name: "screen-changed"; payload: null }
+  | { name: "toggle-island"; payload: null }
+  | { name: "file-drag-cancelled"; payload: null };
 
 export interface DragDropPayload {
   type: "enter" | "over" | "drop" | "leave";

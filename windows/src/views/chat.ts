@@ -82,7 +82,7 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
     } catch (err) {
       State.stateOverride = null;
       State.noteMessage = String(err).replace(/^Error:\s*/, "");
-      State.view = "note";
+      if (!State.pendingApproval) State.view = "note";
       Sound.play("error");
     } finally {
       sending = false;
@@ -98,7 +98,6 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
       e.preventDefault();
       void submit();
     }
-    e.stopPropagation(); // Escape closes the island, not the chat
   });
 
   return {

@@ -18,12 +18,14 @@ mod win_user;
 
 use std::os::windows::process::CommandExt;
 use std::process::Command;
+use std::str::FromStr;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_autostart::ManagerExt;
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 use claude::{Chat, ChatContext, ChatReply};
 use files::DroppedFile;
@@ -38,6 +40,14 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 pub struct Shared {
     pub settings: Mutex<Settings>,
     pub gate: Arc<PollGate>,
+    shortcut_status: Mutex<ShortcutStatus>,
+}
+
+#[derive(Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ShortcutStatus {
+    active: Option<String>,
+    error: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -45,6 +55,8 @@ pub struct Shared {
 pub struct BootInfo {
     settings: Settings,
     screen: ScreenInfo,
+    monitors: Vec<island::MonitorOption>,
+    shortcut_status: ShortcutStatus,
     version: String,
     hook_path: String,
     capabilities: capabilities::CapabilityRegistry,
@@ -56,9 +68,13 @@ fn boot(app: AppHandle, shared: State<Shared>) -> BootInfo {
     // The real state of ~/.claude/settings.json wins over whatever we stored.
     settings.hooks_installed = hooks::status().installed;
     let screen = island::screen_info(&app, &settings.screen);
+    let monitors = island::monitor_options(&app);
+    let shortcut_status = shared.shortcut_status.lock().unwrap().clone();
     BootInfo {
         settings,
         screen,
+        monitors,
+        shortcut_status,
         version: env!("CARGO_PKG_VERSION").to_string(),
         hook_path: settings::hook_exe_path().to_string_lossy().to_string(),
         capabilities: capabilities::CapabilityRegistry::discover(),
@@ -67,12 +83,22 @@ fn boot(app: AppHandle, shared: State<Shared>) -> BootInfo {
 
 #[tauri::command]
 fn save_settings(app: AppHandle, shared: State<Shared>, settings: Settings) {
-    let (screen_changed, autostart_changed) = {
+    let (screen_changed, autostart_changed, settings) = {
         let mut current = shared.settings.lock().unwrap();
-        let screen_changed = current.screen != settings.screen;
         let autostart_changed = current.autostart != settings.autostart;
+        let mut settings = settings;
+        // The shortcut has its own fallible command so a failed registration
+        // cannot be persisted as if it were active.
+        settings.toggle_shortcut = current.toggle_shortcut.clone();
+        settings.edge_offset = if settings.edge_offset.is_finite() {
+            settings.edge_offset.clamp(0.0, island::MAX_EDGE_OFFSET)
+        } else {
+            current.edge_offset
+        };
+        let placement_changed =
+            current.screen != settings.screen || current.edge_offset != settings.edge_offset;
         *current = settings.clone();
-        (screen_changed, autostart_changed)
+        (placement_changed, autostart_changed, settings)
     };
     if let Err(err) = settings::save(&settings) {
         eprintln!("[anti-scrolling-notch] could not save settings: {err}");
@@ -90,7 +116,7 @@ fn save_settings(app: AppHandle, shared: State<Shared>, settings: Settings) {
     }
     if screen_changed {
         let collapsed = shared.gate.collapsed.load(Ordering::Relaxed);
-        island::apply_geometry(&app, &settings.screen, collapsed);
+        island::apply_geometry(&app, &settings.screen, collapsed, settings.edge_offset);
     }
     // Keep the other window in step (island ⇄ settings window).
     let _ = app.emit("settings-changed", settings);
@@ -100,9 +126,9 @@ fn save_settings(app: AppHandle, shared: State<Shared>, settings: Settings) {
 /// cursor poll; anything else → full panel and 60 Hz polling.
 #[tauri::command]
 fn set_collapsed(app: AppHandle, shared: State<Shared>, collapsed: bool) {
-    let pref = shared.settings.lock().unwrap().screen.clone();
+    let settings = shared.settings.lock().unwrap().clone();
     shared.gate.collapsed.store(collapsed, Ordering::Relaxed);
-    island::apply_geometry(&app, &pref, collapsed);
+    island::apply_geometry(&app, &settings.screen, collapsed, settings.edge_offset);
     // The wake strip must always take the mouse, and a resize invalidates the flag.
     island::set_ignore_cursor(&app, false);
     shared.gate.forget_ignore_state();
@@ -133,9 +159,108 @@ fn focus_window(app: AppHandle, focused: bool) {
 
 #[tauri::command]
 fn reposition(app: AppHandle, shared: State<Shared>) {
-    let pref = shared.settings.lock().unwrap().screen.clone();
+    let settings = shared.settings.lock().unwrap().clone();
     let collapsed = shared.gate.collapsed.load(Ordering::Relaxed);
-    island::apply_geometry(&app, &pref, collapsed);
+    island::apply_geometry(&app, &settings.screen, collapsed, settings.edge_offset);
+}
+
+#[tauri::command]
+fn monitor_options(app: AppHandle) -> Vec<island::MonitorOption> {
+    island::monitor_options(&app)
+}
+
+fn parse_shortcut(value: &str) -> Result<Shortcut, String> {
+    Shortcut::from_str(value.trim()).map_err(|err| format!("Invalid shortcut: {err}"))
+}
+
+#[tauri::command]
+fn set_toggle_shortcut(
+    app: AppHandle,
+    shared: State<Shared>,
+    shortcut: String,
+) -> Result<ShortcutStatus, String> {
+    let shortcut_text = shortcut.trim().to_string();
+    if shortcut_text.is_empty() {
+        return Err("Enter a global shortcut.".into());
+    }
+    let new_shortcut = parse_shortcut(&shortcut_text)?;
+    let mut settings = shared.settings.lock().unwrap();
+    let previous = settings.toggle_shortcut.clone();
+    let previous_status = shared.shortcut_status.lock().unwrap().clone();
+    if previous == shortcut_text && previous_status.active.as_deref() == Some(&shortcut_text) {
+        return Ok(previous_status);
+    }
+
+    let manager = app.global_shortcut();
+    manager
+        .register(new_shortcut)
+        .map_err(|err| format!("Could not register shortcut: {err}"))?;
+
+    if let Some(active) = previous_status.active.as_deref() {
+        if active != shortcut_text {
+            if let Ok(old_shortcut) = parse_shortcut(active) {
+                if let Err(err) = manager.unregister(old_shortcut) {
+                    if let Ok(new_shortcut) = parse_shortcut(&shortcut_text) {
+                        let _ = manager.unregister(new_shortcut);
+                    }
+                    return Err(format!("Could not replace the active shortcut: {err}"));
+                }
+            }
+        }
+    }
+
+    let mut updated = settings.clone();
+    updated.toggle_shortcut = shortcut_text.clone();
+    if let Err(err) = settings::save(&updated) {
+        if let Ok(new_shortcut) = parse_shortcut(&shortcut_text) {
+            let _ = manager.unregister(new_shortcut);
+        }
+        let restore = previous_status
+            .active
+            .as_deref()
+            .and_then(|active| parse_shortcut(active).ok())
+            .and_then(|old| manager.register(old).err());
+        if let Some(restore_err) = restore {
+            *shared.shortcut_status.lock().unwrap() = ShortcutStatus {
+                active: None,
+                error: Some(format!("Settings could not be saved ({err}); prior shortcut could not be restored ({restore_err}).")),
+            };
+        }
+        return Err(format!("Could not save shortcut setting: {err}"));
+    }
+
+    *settings = updated;
+    let status = ShortcutStatus {
+        active: Some(shortcut_text),
+        error: None,
+    };
+    *shared.shortcut_status.lock().unwrap() = status.clone();
+    drop(settings);
+    let _ = app.emit("settings-changed", shared.settings.lock().unwrap().clone());
+    Ok(status)
+}
+
+#[cfg(test)]
+mod shortcut_tests {
+    use super::parse_shortcut;
+
+    #[test]
+    fn default_shortcut_uses_supported_accelerator_syntax() {
+        assert!(parse_shortcut("CommandOrControl+Alt+Shift+Space").is_ok());
+    }
+
+    #[test]
+    fn invalid_shortcut_is_rejected_before_registration() {
+        assert!(parse_shortcut("not a shortcut").is_err());
+    }
+}
+
+#[tauri::command]
+fn set_file_drag_active(shared: State<Shared>, active: bool) {
+    shared
+        .gate
+        .file_drag_active
+        .store(active, Ordering::Relaxed);
 }
 
 #[tauri::command]
@@ -336,7 +461,8 @@ fn log_line(message: String) {
 /// for the *same* arguments as the island (see `additionalBrowserArgs` in
 /// tauri.conf.json) — a mismatch makes the second window come up blank, with no
 /// error anywhere.
-const BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required";
+const BROWSER_ARGS: &str =
+    "--disable-features=msWebOOUI,msPdfOOUI --autoplay-policy=no-user-gesture-required";
 
 /// In a dev build the pages are served by Vite, so the second window needs the
 /// absolute dev URL; a bundled build resolves it inside the app bundle.
@@ -408,15 +534,28 @@ pub fn run() {
                 .app_name(identity::AUTOSTART_VALUE_NAME)
                 .build(),
         )
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    if event.state == ShortcutState::Pressed {
+                        let _ = app.emit_to(island::WINDOW_LABEL, "toggle-island", ());
+                    }
+                })
+                .build(),
+        )
         .manage(Shared {
             settings: Mutex::new(loaded.clone()),
             gate: gate.clone(),
+            shortcut_status: Mutex::new(ShortcutStatus::default()),
         })
         .manage(Pending::default())
         .manage(Chat::default())
         .invoke_handler(tauri::generate_handler![
             boot,
             save_settings,
+            monitor_options,
+            set_toggle_shortcut,
+            set_file_drag_active,
             set_collapsed,
             set_island_rect,
             focus_window,
@@ -445,13 +584,30 @@ pub fn run() {
         ])
         .setup(move |app| {
             let handle = app.handle().clone();
+            let shared = app.state::<Shared>();
+            match parse_shortcut(&loaded.toggle_shortcut).and_then(|shortcut| {
+                handle
+                    .global_shortcut()
+                    .register(shortcut)
+                    .map_err(|err| err.to_string())
+            }) {
+                Ok(()) => {
+                    shared.shortcut_status.lock().unwrap().active =
+                        Some(loaded.toggle_shortcut.clone());
+                }
+                Err(err) => {
+                    let message = format!("Could not register startup shortcut: {err}");
+                    log::line(message.clone());
+                    shared.shortcut_status.lock().unwrap().error = Some(message);
+                }
+            }
             tray::build(&handle)?;
             // Before the island: see create_settings_window.
             create_settings_window(&handle);
 
             if let Some(win) = island::window(&handle) {
                 island::make_non_activating(&win);
-                island::apply_geometry(&handle, &loaded.screen, false);
+                island::apply_geometry(&handle, &loaded.screen, false, loaded.edge_offset);
                 let _ = win.show();
             }
             gate.collapsed.store(false, Ordering::Relaxed);

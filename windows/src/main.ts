@@ -51,6 +51,15 @@ async function main() {
     }
   });
 
+  await onEvent<null>("toggle-island", () => {
+    Sound.resume();
+    if (State.pendingApproval) {
+      island.alert("approval");
+      return;
+    }
+    island.fsm.toggle();
+  });
+
   await onEvent<null>("screen-changed", () => void Bridge.reposition());
 
   // The settings window writes preferences; apply them here without a restart.
