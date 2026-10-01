@@ -32,8 +32,8 @@ The release build may compile/package the inherited assets for local validation,
 - [x] Hook install/remove recognizes only the exact new relay executable path. Tests prove existing Coucou and unrelated hooks are retained.
 - [x] The development resource manifest points to current Mochi, icon and sound resources. The source sound set and production build copies match byte-for-byte; no visual/animation/sound source asset changes are included.
 - [x] The local installer builds with product-specific naming and new owned cleanup paths. Release publication is blocked until REL-11 clearance.
-- [ ] Locked tests, CI, build/type checks, existing verified Codex replay, documentation checks and `git diff --check` pass.
-- [ ] Ledger records unsupported/unverified runtime capabilities and exact commit/PR/check evidence; later Stage 4 tasks remain pending.
+- [x] Locked tests, CI, build/type checks, existing verified Codex replay, documentation checks and `git diff --check` pass.
+- [x] Ledger records unsupported/unverified runtime capabilities and exact commit/PR/check evidence; later Stage 4 tasks remain pending.
 
 ## Local implementation and validation — 1 October 2026
 
@@ -43,7 +43,11 @@ The runtime identity manifest now defines `Anti-Scrolling-Notch`, `com.yashwanth
 
 On the installed Rust/Cargo 1.98.1 MSVC toolchain, scoped Rust 2021 formatting checks passed for edited Rust logic, `cargo test --workspace --locked` passed 30 tests with 2 installed-app environment tests ignored, and `cargo clippy --workspace --all-targets --locked` passed with the same three inherited warnings recorded in the baseline. `npm run test:capabilities`, `npm run test:identity`, `npm run test:resources`, and the release frontend type-check/build passed. The Windows hook replay passed all four captured lifecycle events, eight unverified/malformed neutral fallbacks, and four no-app fallbacks. `npm run pack` rebuilt the relay from the current source and produced the local 4.04 MiB NSIS installer `Anti-Scrolling-Notch-Windows-0.1.1-setup.exe`; generated installers remain ignored local artifacts and were not installed or launched.
 
-The current user's startup registration and settings were not exercised at runtime. The installed UI was not relaunched for this packet; source and build evidence establish the identity changes while the earlier project-owner BASE-05 acceptance remains separate. Local changed-document/link/fence and whitespace checks passed. Hosted Windows CI and PR publication are pending; keep the final two acceptance boxes unchecked until the final pushed commit and its checks are verified.
+The current user's startup registration and settings were not exercised at runtime. The installed UI was not relaunched for this packet; source and build evidence establish the identity changes while the earlier project-owner BASE-05 acceptance remains separate. Local changed-document/link/fence and whitespace checks passed.
+
+## Published validation — 1 October 2026
+
+Implementation commit `c7dc5fb09f39cce2f8b33f71688bae5ae023ddf7` is pushed to `origin/work/stage-4-runtime-identity`, and the remote branch SHA matched. [PR #11](https://github.com/YashwanthDevelops/Anti-Scrolling-Notch/pull/11) is open against `main` and remains unmerged at this packet boundary. [Windows CI run 28](https://github.com/YashwanthDevelops/Anti-Scrolling-Notch/actions/runs/36889500973) passed scope, frontend, documentation and Rust workspace jobs; inherited [Build run 37](https://github.com/YashwanthDevelops/Anti-Scrolling-Notch/actions/runs/36889500988) also passed. SHELL-01–03 are complete on the packet branch; SHELL-04 onward and all later stages remain pending.
 
 ## PR and completion gate
 
