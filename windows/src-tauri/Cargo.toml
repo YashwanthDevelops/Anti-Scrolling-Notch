@@ -1,13 +1,13 @@
 [package]
-name = "coucou"
-description = "Coucou for Windows — Mochi lives at the top of your screen"
-authors = ["Louis Raille"]
+name = "anti-scrolling-notch"
+description = "Anti-Scrolling-Notch for Windows — retained Mochi prototype shell"
+authors = ["YashwanthDevelops"]
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [lib]
-name = "coucou_lib"
+name = "anti_scrolling_notch_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -15,6 +15,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 codex-hook-contract = { path = "../codex-hook-contract" }
+anti-scrolling-notch-runtime-identity = { path = "../runtime-identity" }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-single-instance = "2"
 tauri-plugin-autostart = "2"

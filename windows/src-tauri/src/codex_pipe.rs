@@ -18,7 +18,7 @@ const READ_TIMEOUT: Duration = Duration::from_secs(2);
 pub fn pipe_name() -> String {
     let key = crate::win_user::current_user_sid()
         .unwrap_or_else(|| std::env::var("USERNAME").unwrap_or_else(|_| "user".into()));
-    format!(r"\\.\pipe\coucou-codex-{key}")
+    format!(r"\\.\pipe\{}-{key}", crate::identity::CODEX_PIPE_PREFIX)
 }
 
 pub fn start() {

@@ -67,7 +67,7 @@ function claudeSection(status: HookStatus): HTMLElement {
       h("div", {
         class: "hint",
         text: status.installed
-          ? "Coucou is hooked into your Claude Code sessions. Tool calls, questions and permission requests show up in the island, and you can answer them there."
+          ? "Anti-Scrolling-Notch is hooked into your Claude Code sessions. Tool calls, questions and permission requests show up in the island, and you can answer them there."
           : "Install the hooks to see your Claude Code sessions in the island and approve permissions without leaving what you are doing.",
       }),
       h("div", { class: "row" },
@@ -84,7 +84,7 @@ function claudeSection(status: HookStatus): HTMLElement {
     if (!status.hookReady) {
       body.append(h("div", {
         class: "notice warn",
-        text: "coucou-hook.exe is not in place yet. Restart Coucou; if it still fails, build it with `cargo build -p coucou-hook`.",
+        text: "anti-scrolling-notch-hook.exe is not in place yet. Restart Anti-Scrolling-Notch; if it still fails, build it with `cargo build -p anti-scrolling-notch-hook`.",
       }));
     }
 
@@ -135,7 +135,7 @@ function claudeSection(status: HookStatus): HTMLElement {
         class: "hint",
         text: install
           ? "This is exactly what will change in your settings.json. Your own hooks are left untouched."
-          : "This removes Coucou's entries only. Your own hooks are left untouched.",
+          : "This removes Anti-Scrolling-Notch's entries only. Existing Coucou and your other hooks are left untouched.",
       }),
       renderDiff(preview.diff),
       h("div", { class: "row" },
@@ -440,7 +440,7 @@ async function main() {
 
   clear(root);
   root.append(
-    h("h1", {}, h("span", { text: "Coucou" }), h("span", { class: "version", text: version })),
+    h("h1", {}, h("span", { text: "Anti-Scrolling-Notch" }), h("span", { class: "version", text: version })),
     claudeSection(status),
     apiSection(hasKey),
     integrationsSection(present),

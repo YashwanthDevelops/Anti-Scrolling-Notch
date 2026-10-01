@@ -1,4 +1,4 @@
-// Preferences, stored as plain JSON in %APPDATA%\Coucou\settings.json.
+// Preferences, stored as plain JSON in %APPDATA%\Anti-Scrolling-Notch\settings.json.
 // No secret ever lands here — API keys live in the Windows Credential Manager.
 
 use serde::{Deserialize, Serialize};
@@ -47,24 +47,30 @@ impl Default for Settings {
     }
 }
 
-/// %APPDATA%\Coucou
+/// %APPDATA%\Anti-Scrolling-Notch
 pub fn config_dir() -> PathBuf {
     let base = std::env::var_os("APPDATA")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."));
-    base.join("Coucou")
+    app_data_dir(base)
 }
 
-/// %LOCALAPPDATA%\Coucou — where coucou-hook.exe and the log live.
+/// %LOCALAPPDATA%\Anti-Scrolling-Notch — where the relay, inbox and log live.
 pub fn local_dir() -> PathBuf {
     let base = std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."));
-    base.join("Coucou")
+    app_data_dir(base)
+}
+
+fn app_data_dir(base: PathBuf) -> PathBuf {
+    base.join(crate::identity::STORAGE_DIRECTORY)
 }
 
 pub fn hook_exe_path() -> PathBuf {
-    local_dir().join("bin").join("coucou-hook.exe")
+    local_dir()
+        .join("bin")
+        .join(crate::identity::RELAY_EXECUTABLE)
 }
 
 fn settings_path() -> PathBuf {
@@ -84,4 +90,29 @@ pub fn save(settings: &Settings) -> std::io::Result<()> {
     let json = serde_json::to_vec_pretty(settings)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
     std::fs::write(settings_path(), json)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn data_and_relay_paths_are_isolated_from_coucou() {
+        let appdata = PathBuf::from(r"C:\Users\Tester\AppData\Roaming");
+        let local = PathBuf::from(r"C:\Users\Tester\AppData\Local");
+        assert_eq!(
+            app_data_dir(appdata),
+            PathBuf::from(r"C:\Users\Tester\AppData\Roaming\Anti-Scrolling-Notch")
+        );
+        let local_dir = app_data_dir(local);
+        assert!(!local_dir.ends_with("Coucou"));
+        assert_eq!(
+            local_dir
+                .join("bin")
+                .join(crate::identity::RELAY_EXECUTABLE),
+            PathBuf::from(
+                r"C:\Users\Tester\AppData\Local\Anti-Scrolling-Notch\bin\anti-scrolling-notch-hook.exe"
+            )
+        );
+    }
 }

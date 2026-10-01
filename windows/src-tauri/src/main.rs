@@ -1,6 +1,6 @@
-// Coucou runs without a console window: Mochi is the whole UI.
+// Anti-Scrolling-Notch runs without a console window: Mochi is the whole UI.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    coucou_lib::run()
+    anti_scrolling_notch_lib::run()
 }

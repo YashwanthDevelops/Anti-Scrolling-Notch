@@ -20,20 +20,30 @@
 
 This packet adds no Codex event or interaction capability. The accepted four-event Codex CLI observer boundary and its neutral fallback stay unchanged. The helper executable, backend listener, configuration labels and frontend continue to use the already verified contract; no schema is added.
 
-The app will use a product-specific Tauri/Cargo identity, `%APPDATA%\Anti-Scrolling-Notch`, `%LOCALAPPDATA%\Anti-Scrolling-Notch`, a new Windows Credential Manager service namespace, a new HKCU Run value name, an app-specific relay executable, and separate app/Codex pipe prefixes. Existing `%APPDATA%\Coucou`, `%LOCALAPPDATA%\Coucou`, Coucou credential entries, legacy startup entry, and old Coucou hook commands are outside the new app's ownership. No migration is implemented here.
+The app will use a product-specific Tauri/Cargo identity, `%APPDATA%\Anti-Scrolling-Notch`, `%LOCALAPPDATA%\Anti-Scrolling-Notch`, a new Windows Credential Manager service namespace, and the explicit HKCU `Software\Microsoft\Windows\CurrentVersion\Run` value name `Anti-Scrolling-Notch`, plus an app-specific relay executable and separate app/Codex pipe prefixes. Existing `%APPDATA%\Coucou`, `%LOCALAPPDATA%\Coucou`, Coucou credential entries, legacy startup entry, and old Coucou hook commands are outside the new app's ownership. No migration is implemented here.
 
 The release build may compile/package the inherited assets for local validation, but CI must not publish a downloadable installer or create a public release until REL-11 is explicitly cleared. Build identity tests and resource-manifest tests are deterministic; they do not claim that the user's actual startup preference was toggled or that an asset license was granted.
 
 ## Acceptance evidence
 
-- [ ] Product/runtime IDs agree across Cargo, Tauri, npm, helper, Windows paths, logs, pipes, settings, installer cleanup, tray, and autostart registration.
-- [ ] The app starts with startup disabled by default; the supported autostart adapter registers only the new explicit app name. The current user's Run key is not modified during validation.
-- [ ] Settings/secrets/local paths are fresh product-specific locations. Existing Coucou data and Credential Manager entries are left untouched; no implicit migration occurs.
-- [ ] Hook install/remove recognizes only the exact new relay executable path. Tests prove existing Coucou and unrelated hooks are retained.
-- [ ] The development resource manifest points to current Mochi, icon and sound resources. The source sound set and production build copies match byte-for-byte; no visual/animation/sound source asset changes are included.
-- [ ] Installer builds with product-specific naming and new owned cleanup paths. Release publication is blocked until REL-11 clearance.
+- [x] Product/runtime IDs agree across Cargo, Tauri, npm, helper, Windows paths, logs, pipes, settings, installer cleanup, tray, and autostart registration.
+- [x] Startup is disabled by the default settings value, and the supported autostart adapter registers only the explicit new app name. The current user's Run key was not modified during validation.
+- [x] Settings/secrets/local paths are fresh product-specific locations. Existing Coucou data and Credential Manager entries are left untouched; no implicit migration occurs.
+- [x] Hook install/remove recognizes only the exact new relay executable path. Tests prove existing Coucou and unrelated hooks are retained.
+- [x] The development resource manifest points to current Mochi, icon and sound resources. The source sound set and production build copies match byte-for-byte; no visual/animation/sound source asset changes are included.
+- [x] The local installer builds with product-specific naming and new owned cleanup paths. Release publication is blocked until REL-11 clearance.
 - [ ] Locked tests, CI, build/type checks, existing verified Codex replay, documentation checks and `git diff --check` pass.
 - [ ] Ledger records unsupported/unverified runtime capabilities and exact commit/PR/check evidence; later Stage 4 tasks remain pending.
+
+## Local implementation and validation — 1 October 2026
+
+The runtime identity manifest now defines `Anti-Scrolling-Notch`, `com.yashwanthdevelops.antiscrollingnotch`, the app/frontend/relay package names, fresh `%APPDATA%` and `%LOCALAPPDATA%` directory names, Credential Manager service, explicit startup value name, separate app/Codex pipe prefixes, and diagnostic log name. A shared Rust crate generates the constants consumed by the app and relay; tests check the manifest against Cargo, Tauri, npm, paths, pipes, autostart and installer configuration. Hook ownership compares the normalized full executable path, so the inherited Coucou command and similarly named binaries remain foreign. Settings still default startup off; validation did not modify the user's Run key, Codex/Claude settings, credentials, or old Coucou paths.
+
+`windows/resources.json` marks the inherited Mochi renderer, greeting, inline/application icons and 28 WAV sounds as replaceable development assets. The sound player reads its public path from that manifest. The resource test checks all 28 production-bundle WAV files against their inherited source SHA-256 values. No Mochi renderer, island state/motion, layout/style, icon or sound source file changed; no asset-rights conclusion is made. The changed UI text and app/window/tray labels only reflect the new product identity.
+
+On the installed Rust/Cargo 1.98.1 MSVC toolchain, scoped Rust 2021 formatting checks passed for edited Rust logic, `cargo test --workspace --locked` passed 30 tests with 2 installed-app environment tests ignored, and `cargo clippy --workspace --all-targets --locked` passed with the same three inherited warnings recorded in the baseline. `npm run test:capabilities`, `npm run test:identity`, `npm run test:resources`, and the release frontend type-check/build passed. The Windows hook replay passed all four captured lifecycle events, eight unverified/malformed neutral fallbacks, and four no-app fallbacks. `npm run pack` rebuilt the relay from the current source and produced the local 4.04 MiB NSIS installer `Anti-Scrolling-Notch-Windows-0.1.1-setup.exe`; generated installers remain ignored local artifacts and were not installed or launched.
+
+The current user's startup registration and settings were not exercised at runtime. The installed UI was not relaunched for this packet; source and build evidence establish the identity changes while the earlier project-owner BASE-05 acceptance remains separate. Local changed-document/link/fence and whitespace checks passed. Hosted Windows CI and PR publication are pending; keep the final two acceptance boxes unchecked until the final pushed commit and its checks are verified.
 
 ## PR and completion gate
 

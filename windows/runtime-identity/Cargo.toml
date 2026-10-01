@@ -1,0 +1,9 @@
+[package]
+name = "anti-scrolling-notch-runtime-identity"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+build = "build.rs"
+
+[build-dependencies]
+serde_json = "1"

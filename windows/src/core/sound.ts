@@ -3,6 +3,8 @@
 // they are served at /sounds/<name>.wav. Default volume 0.12, slider range 0–0.2,
 // exactly like the Mac player, and several sounds may overlap.
 
+import resources from "../../resources.json";
+
 export const SOUND_NAMES = [
   "peek", "open", "close", "hover", "blip", "slap", "annoyed", "dizzy", "greet",
   "work", "finish", "error", "approval", "question", "approve", "gulp", "tick",
@@ -37,7 +39,7 @@ class SoundEngine {
       await Promise.all(
         SOUND_NAMES.map(async (name) => {
           try {
-            const res = await fetch(`/sounds/${name}.wav`);
+            const res = await fetch(`${resources.assets.sounds.publicDirectory}/${name}.wav`);
             if (!res.ok) return;
             const buf = await ctx.decodeAudioData(await res.arrayBuffer());
             this.buffers.set(name, buf);

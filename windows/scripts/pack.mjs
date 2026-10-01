@@ -10,7 +10,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const bundleDir = join(root, "target", "release", "bundle", "nsis");
 const outDir = join(root, "release");
 
-const { version } = JSON.parse(readFileSync(join(root, "src-tauri", "tauri.conf.json"), "utf8"));
+const { version, productName } = JSON.parse(readFileSync(join(root, "src-tauri", "tauri.conf.json"), "utf8"));
 
 let installers = [];
 try {
@@ -30,8 +30,8 @@ const built = installers
   .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0];
 
 mkdirSync(outDir, { recursive: true });
-const versioned = join(outDir, `Coucou-Windows-${version}-setup.exe`);
-const rolling = join(outDir, "Coucou-Windows-setup.exe");
+const versioned = join(outDir, `${productName}-Windows-${version}-setup.exe`);
+const rolling = join(outDir, `${productName}-Windows-setup.exe`);
 copyFileSync(built, versioned);
 copyFileSync(built, rolling);
 
