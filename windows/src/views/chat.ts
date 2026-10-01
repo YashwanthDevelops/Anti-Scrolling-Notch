@@ -4,6 +4,7 @@
 import { h, svg, clear } from "./dom";
 import { ICONS } from "./icons";
 import { Bridge, type ChatContext } from "../core/bridge";
+import { capabilityRequestGeneration } from "../core/capability-guard.js";
 import { Sound } from "../core/sound";
 import { State, type ChatMessage } from "../core/state";
 import type { ViewHost } from "./views";
@@ -39,6 +40,13 @@ function contextChip(label: string): HTMLElement {
 export function buildPrompt(onHeightChange: () => void): ViewHost {
   const chipRow = h("div", { class: "chip-row" });
   const log = h("div", { class: "chat-log" });
+  const unavailable = h("div", {
+    class: "chat-unavailable",
+    role: "status",
+    "aria-live": "polite",
+    hidden: true,
+    text: "Companion chat is unavailable in this version. Continue in Codex.",
+  });
   const input = h("input", {
     type: "text",
     class: "chat-input",
@@ -51,7 +59,7 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
   const el = h(
     "div",
     { class: "view" },
-    h("div", { class: "card wash chat-card" }, h("div", { class: "chat-body" }, chipRow, log, bar)),
+    h("div", { class: "card wash chat-card" }, h("div", { class: "chat-body" }, chipRow, log, unavailable, bar)),
   );
   (el.querySelector(".card") as HTMLElement).style.setProperty("--wash", "rgba(99,102,241,0.5)");
 
@@ -59,6 +67,7 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
   let renderedCount = -1;
 
   async function submit() {
+    if (!capabilityRequestGeneration(State.capabilities, "codex.managedSession")) return;
     const query = input.value.trim();
     if (!query || sending) return;
     input.value = "";
@@ -121,8 +130,14 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
         log.scrollTop = log.scrollHeight;
       }
 
-      input.placeholder = State.chatHistory.length === 0 ? "Ask me anything…" : "Continue…";
-      input.disabled = sending;
+      const chatAvailable = capabilityRequestGeneration(State.capabilities, "codex.managedSession") !== null;
+      input.placeholder = chatAvailable
+        ? State.chatHistory.length === 0 ? "Ask me anything…" : "Continue…"
+        : "Companion chat unavailable";
+      input.disabled = sending || !chatAvailable;
+      send.disabled = sending || !chatAvailable;
+      send.title = chatAvailable ? "Send" : "Companion chat is unavailable; continue in Codex.";
+      unavailable.hidden = chatAvailable;
     },
     focus() {
       input.focus();

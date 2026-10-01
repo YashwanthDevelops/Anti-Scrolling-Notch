@@ -56,6 +56,18 @@ test("disabled, missing and adapterless capabilities cannot produce a request to
   assert.equal(capabilityRequestGeneration(runtimeRegistry(), "codex.unlisted"), null);
 });
 
+test("managed chat and file delivery controls remain unavailable without verified adapters", () => {
+  const registry = runtimeRegistry({
+    capabilities: [
+      verifiedOpenApp,
+      { id: "codex.managedSession", enabled: false, adapterAvailable: false },
+      { id: "codex.attachmentDelivery", enabled: false, adapterAvailable: false },
+    ],
+  });
+  assert.equal(capabilityRequestGeneration(registry, "codex.managedSession"), null);
+  assert.equal(capabilityRequestGeneration(registry, "codex.attachmentDelivery"), null);
+});
+
 test("fixture-supplied enabled flags cannot replace the backend-discovered capability list", () => {
   const forgedDemo = runtimeRegistry({
     runtimeSource: "demo-fixture",

@@ -110,12 +110,21 @@ export const Bridge = {
   approvalDecline: (requestId: string) => call<void>("approval_decline", { requestId }),
 
   // ── Chat, files, secrets ──────────────────────────────────────────────────
-  /** One chat turn. The API key and any file bytes never leave Rust. */
-  chatSend: (query: string, context: ChatContext | null) =>
-    callOrThrow<{ text: string }>("chat_send", { query, context }),
-  chatReset: () => call<void>("chat_reset"),
-  /** Copies a dropped file into the inbox. */
-  ingestFile: (path: string) => callOrThrow<DroppedFile>("ingest_file", { path }),
+  /** Managed chat stays unavailable until its backend capability is verified. */
+  chatSend: (query: string, context: ChatContext | null) => {
+    const generation = capabilityRequestGeneration(State.capabilities, "codex.managedSession");
+    if (!generation) return Promise.reject(new Error("Companion chat is unavailable; continue in Codex."));
+    if (context?.kind === "file" && !capabilityRequestGeneration(State.capabilities, "codex.attachmentDelivery")) {
+      return Promise.reject(new Error("Codex file delivery is unavailable; attach the file in Codex."));
+    }
+    return callOrThrow<{ text: string }>("chat_send", { query, context, capabilityGeneration: generation });
+  },
+  /** Copies a dropped file only when the backend enables verified delivery. */
+  ingestFile: (path: string) => {
+    const generation = capabilityRequestGeneration(State.capabilities, "codex.attachmentDelivery");
+    if (!generation) return Promise.reject(new Error("Codex file delivery is unavailable; attach the file in Codex."));
+    return callOrThrow<DroppedFile>("ingest_file", { path, capabilityGeneration: generation });
+  },
   /** Only ever tells you whether a key exists — never its value. */
   secretPresent: (key: string) => call<boolean>("secret_present", { key }),
   secretSet: (key: string, value: string) => callOrThrow<void>("secret_set", { key, value }),

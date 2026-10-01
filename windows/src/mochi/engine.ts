@@ -166,6 +166,7 @@ const FONT = `system-ui, "Segoe UI Variable Text", "Segoe UI", sans-serif`;
 
 export class BotEngine {
   isMini = false;
+  reducedMotion = false;
   /** Solid body colour for mini bots / integration pills (null = Mochi gradient). */
   bodyColor: RGB | null = null;
 
@@ -222,6 +223,42 @@ export class BotEngine {
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
+  setReducedMotion(enabled: boolean) {
+    if (this.reducedMotion === enabled) return;
+    this.reducedMotion = enabled;
+    if (!enabled) {
+      if (this.permanentEmote === "wink" && this.permanentEye === "wink") {
+        this.permanentEye = null;
+        this.eyeOverride = null;
+        this.eyeOverrideUntil = 0;
+        this.miniNextBehavior = now() + 0.8 + Math.random() * 1.7;
+      }
+      return;
+    }
+
+    this.tweens.clear();
+    this.locks.clear();
+    this.particles = [];
+    this.roll = 0;
+    this.yaw = this.tgYaw = 0;
+    this.pitch = this.tgPitch = 0;
+    this.tilt = this.tgTilt = this.cfg.tilt;
+    this.sx = this.tgSx = 1;
+    this.sy = this.tgSy = 1;
+    this.es = this.tgEs = 1;
+    this.oy = this.ox = 0;
+    this.col = this.colT;
+    this.slotH = this.slotHTarget = this.slotHVel = 0;
+    this.hands = this.blush = 0;
+    this.waveStart = this.waveUntil = 0;
+    this.badgeS = this.badge ? 1 : 0;
+    if (this.permanentEmote === "wink") {
+      this.permanentEye = "wink";
+      this.eyeOverride = "wink";
+      this.eyeOverrideUntil = Number.POSITIVE_INFINITY;
+    }
+  }
+
   setState(next: BotStateName, force = false) {
     if (this.state === next && !force) return;
     const prev = this.state;
@@ -231,6 +268,7 @@ export class BotEngine {
     if (!this.locks.has("tint")) this.tint = this.cfg.tint;
     if (!this.locks.has("tilt")) this.tgTilt = this.cfg.tilt;
     this.setBadge(this.cfg.badge);
+    if (this.reducedMotion) this.col = this.colT;
 
     switch (next) {
       case "finished":
@@ -264,6 +302,11 @@ export class BotEngine {
     const key = b ? `${b.kind}-${b.color.join(",")}` : "none";
     if (key === this.badgeKey) return;
     this.badgeKey = key;
+    if (this.reducedMotion) {
+      this.badge = b;
+      this.badgeS = b ? 1 : 0;
+      return;
+    }
     const tok = ++this.badgeToken;
     this.anim("badgeS", [[0, 90, Ease.inOut]]);
     setTimeout(() => {
@@ -329,6 +372,11 @@ export class BotEngine {
     this.eyeOverride = "happy";
     this.eyeOverrideUntil = t + 2.0;
     this.anim("oy", [[-0.06, 220, Ease.out], [0.0, 220, Ease.back]]);
+    if (this.reducedMotion) {
+      this.waveStart = this.waveUntil = 0;
+      Sound.play("greet");
+      return;
+    }
 
     setTimeout(() => {
       if (this.greetToken !== tok) return;
@@ -425,6 +473,7 @@ export class BotEngine {
   }
 
   emit(type: Particle["type"], count: number) {
+    if (this.reducedMotion) return;
     for (let i = 0; i < count; i++) {
       const isZ = type === "z";
       this.particles.push({
@@ -454,6 +503,9 @@ export class BotEngine {
 
   /** True while anything is still moving — lets the island stop its RAF loop. */
   get busy(): boolean {
+    if (this.reducedMotion) {
+      return this.eyeOverride != null && this.eyeOverrideUntil !== Number.POSITIVE_INFINITY && now() < this.eyeOverrideUntil;
+    }
     return (
       this.tweens.size > 0 ||
       this.particles.length > 0 ||
@@ -475,6 +527,11 @@ export class BotEngine {
   // ── Tweens ──────────────────────────────────────────────────────────────────
 
   anim(prop: PropKey, keys: TweenKey[], onComplete?: () => void) {
+    if (this.reducedMotion) {
+      this[prop] = keys[keys.length - 1][0];
+      onComplete?.();
+      return;
+    }
     this.tweens.set(prop, {
       prop, keys, index: 0, from: this[prop], startMs: performance.now(), onComplete,
     });
@@ -485,6 +542,23 @@ export class BotEngine {
 
   update(dt: number) {
     const n = now();
+    if (this.reducedMotion) {
+      this.tgYaw = this.tgPitch = 0;
+      this.tgTilt = this.cfg.tilt;
+      this.tgSx = this.tgSy = this.tgEs = 1;
+      this.yaw = this.pitch = this.roll = this.oy = this.ox = 0;
+      this.tilt = this.cfg.tilt;
+      this.sx = this.sy = this.es = 1;
+      this.col = this.colT;
+      this.slotH = this.slotHTarget;
+      this.slotHVel = 0;
+      if (this.eyeOverride && n > this.eyeOverrideUntil) {
+        this.eyeOverride = this.permanentEye;
+        if (this.permanentEye) this.eyeOverrideUntil = Number.POSITIVE_INFINITY;
+      }
+      this.lastTime = n;
+      return;
+    }
     const nowMs = performance.now();
 
     for (const tw of [...this.tweens.values()]) {

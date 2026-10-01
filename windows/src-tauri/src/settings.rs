@@ -10,6 +10,7 @@ use std::path::PathBuf;
 pub struct Settings {
     pub sound_enabled: bool,
     pub sound_volume: f64,
+    pub reduced_motion: bool,
     pub auto_close_interval: f64,
     pub absence_interval: f64,
     pub active_integrations: Vec<String>,
@@ -40,6 +41,7 @@ impl Default for Settings {
         Self {
             sound_enabled: true,
             sound_volume: 0.12,
+            reduced_motion: false,
             auto_close_interval: 15.0,
             absence_interval: 180.0,
             active_integrations: vec![
@@ -143,6 +145,7 @@ mod tests {
         let settings: Settings = serde_json::from_str(old).unwrap();
         assert_eq!(settings.edge_offset, 0.0);
         assert_eq!(settings.toggle_shortcut, default_toggle_shortcut());
+        assert!(!settings.reduced_motion);
     }
 
     #[test]
@@ -151,6 +154,9 @@ mod tests {
             screen: "monitor:\\\\.\\DISPLAY2".into(),
             edge_offset: 48.0,
             toggle_shortcut: "Control+Alt+Shift+Space".into(),
+            sound_enabled: false,
+            sound_volume: 0.075,
+            reduced_motion: true,
             ..Settings::default()
         };
 
@@ -160,5 +166,8 @@ mod tests {
         assert_eq!(restored.screen, settings.screen);
         assert_eq!(restored.edge_offset, settings.edge_offset);
         assert_eq!(restored.toggle_shortcut, settings.toggle_shortcut);
+        assert_eq!(restored.sound_enabled, settings.sound_enabled);
+        assert_eq!(restored.sound_volume, settings.sound_volume);
+        assert!(restored.reduced_motion);
     }
 }

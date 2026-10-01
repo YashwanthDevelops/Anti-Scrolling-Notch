@@ -28,6 +28,17 @@
   --pink: #f472b6;
 }
 
+:root.reduce-motion *,
+:root.reduce-motion *::before,
+:root.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-delay: 0ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  transition-delay: 0ms !important;
+  scroll-behavior: auto !important;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -795,6 +806,16 @@ input[type="range"]::-webkit-slider-thumb {
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
 }
 
+.chat-unavailable {
+  flex: 0 0 auto;
+  color: var(--dim);
+  font: 400 11px/1.35 var(--font);
+}
+
+.chat-unavailable[hidden] {
+  display: none;
+}
+
 .chat-row {
   display: flex;
 }
@@ -891,6 +912,12 @@ input[type="range"]::-webkit-slider-thumb {
   transform: scale(0.94);
 }
 
+.send-btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  transform: none;
+}
+
 /* ── Drop zone ──────────────────────────────────────────────────────────── */
 
 .drop-card {
@@ -945,6 +972,16 @@ input[type="range"]::-webkit-slider-thumb {
   font: 500 13px var(--font);
   color: #d5d7db;
   transition: color 0.2s;
+}
+
+.drop-hint {
+  margin-top: 5px;
+  color: var(--dim);
+  font: 400 11px var(--font);
+}
+
+.drop-card.unavailable .drop-tags {
+  opacity: 0.45;
 }
 
 .drop-card.over .drop-title {

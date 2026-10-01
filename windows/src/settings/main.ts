@@ -4,6 +4,7 @@
 
 import "./settings.css";
 import { Bridge, onEvent, type HookStatus, type MonitorOption, type ToggleShortcutStatus } from "../core/bridge";
+import { Motion } from "../core/motion";
 import { DEFAULT_SETTINGS, type Settings } from "../core/state";
 import { h, clear } from "../views/dom";
 
@@ -16,6 +17,7 @@ const root = document.getElementById("settings-root")!;
 
 async function save() {
   await Bridge.saveSettings(settings);
+  Motion.setReducedMotion(settings.reducedMotion);
 }
 
 // ── Reusable bits ─────────────────────────────────────────────────────────────
@@ -480,6 +482,11 @@ function generalSection(): HTMLElement {
       volume,
     ),
     h("div", { class: "row" },
+      h("label", { text: "Reduce motion" }),
+      toggle(settings.reducedMotion, (v) => { settings.reducedMotion = v; void save(); }),
+      h("span", { class: "hint", text: "Settle decorative animation; keep status and sounds." }),
+    ),
+    h("div", { class: "row" },
       h("label", { text: "Auto-close" }),
       autoClose,
       h("span", { class: "hint", text: "seconds after you leave the island" }),
@@ -512,6 +519,7 @@ async function main() {
   const boot = await Bridge.boot();
   if (boot) {
     settings = { ...settings, ...boot.settings };
+    Motion.setReducedMotion(settings.reducedMotion);
     version = boot.version;
     monitors = boot.monitors;
     shortcutStatus = boot.shortcutStatus;
@@ -544,6 +552,7 @@ async function main() {
 
   void onEvent<Settings>("settings-changed", (s) => {
     settings = { ...settings, ...s };
+    Motion.setReducedMotion(settings.reducedMotion);
   });
 }
 
