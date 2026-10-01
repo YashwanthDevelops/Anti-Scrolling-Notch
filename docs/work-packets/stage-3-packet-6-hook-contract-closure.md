@@ -5,10 +5,10 @@
 | Packet | Stage 3, packet 6: installed CLI hook contract and neutral replay closure |
 | Release profile | Monitor MVP compatibility boundary; no production monitor is enabled |
 | Task IDs | COMPAT-01, COMPAT-02, COMPAT-03 |
-| Branch / PR | `work/stage-3-hook-contract-closure` → Anti-Scrolling-Notch `main` |
+| Branch / PR | `work/stage-3-hook-contract-closure` → Anti-Scrolling-Notch `main`; [PR #10](https://github.com/YashwanthDevelops/Anti-Scrolling-Notch/pull/10) |
 | Dependencies | PR #9 merged into `origin/main` at `8bafb6c1cb00ead36408967939a49f1177836efe`; packet 1's accepted four-event loopback evidence and fixture |
 | User outcome | Keep the accepted four-event CLI observer contract version-pinned, generated from the matching release schema, and demonstrably neutral when the app is unavailable. |
-| Status | Implementation and local packet checks complete; hosted CI and PR review are the remaining packet checks. |
+| Status | Local checks and hosted CI pass; PR #10 is open for review and has not been merged. |
 
 ## Scope
 
@@ -28,7 +28,7 @@ No new hook event is enabled or claimed as runtime-observed. This packet does no
 - The absent-app test timing is a local hook-process replay measurement, not a new in-Codex runtime measurement. No runtime delivery claim is made for unobserved events or Desktop.
 - Windows CI runs the replay after building the hook binary; portable Rust tests also run the schema generator and checksum validation.
 
-Local checks passed: `cargo fmt -p codex-hook-contract -- --check`; `cargo test --workspace --locked` (26 passed, 2 ignored); `cargo clippy --workspace --all-targets --locked` (passed with the same three inherited warnings and no packet warnings); `cargo build --release -p coucou-hook --locked`; the expanded PowerShell transport replay; four frontend capability tests; TypeScript checking; Vite production build; changed-document link/fence checks; and `git diff --check`. Across three local runs, the absent-app replay measured 13–17 ms per event. Hosted CI is the final packet check.
+Local checks passed: `cargo fmt -p codex-hook-contract -- --check`; `cargo test --workspace --locked` (26 passed, 2 ignored); `cargo clippy --workspace --all-targets --locked` (passed with the same three inherited warnings and no packet warnings); `cargo build --release -p coucou-hook --locked`; the expanded PowerShell transport replay; four frontend capability tests; TypeScript checking; Vite production build; changed-document link/fence checks; and `git diff --check`. Across three local runs, the absent-app replay measured 13–17 ms per event. Hosted Windows CI run 25 and inherited Build run 34 passed for commit `a657a8ff65b96760f93da3a9f0a4331be5bab86f`. PR #10 remains open and unmerged at this packet boundary.
 
 ## Completion boundary
 
