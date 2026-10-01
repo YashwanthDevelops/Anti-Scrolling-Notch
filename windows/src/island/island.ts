@@ -2,7 +2,7 @@
 // Mirrors IslandRootView.swift + IslandWindowController.swift.
 
 import { Tracked, Spring, clamp } from "../core/anim";
-import { Bridge, IS_TAURI, onDragDrop } from "../core/bridge";
+import { Bridge, IS_TAURI, onDragDrop, onEvent } from "../core/bridge";
 import {
   EXPANDED_CORNER, EXPANDED_W, NOTCH_W, PANEL_H, PANEL_W,
   ROUNDED_CORNER, VIEW_LAYOUTS, botGlowColor, botGlowOpacity, botPosition, chatPromptHeight,
@@ -70,6 +70,10 @@ export class Island {
   private collapsed = false;
   private collapseTimer: number | null = null;
   private wasInIsland = false;
+  private fileDragActive = false;
+  private dragGeneration = 0;
+  private interactionActive = false;
+  private textFocusActive = false;
   /** Last shape handed to Rust for the click-through test. */
   private pushedRect = { x: -1, y: -1, w: -1, h: -1 };
   private homeCollapseAt: number | null = null;
@@ -141,8 +145,7 @@ export class Island {
         Sound.play(d === "deny" ? "blip" : "approve");
         void Bridge.approvalDecision(req.requestId, d);
         State.pendingApproval = null;
-        State.isPinned = false;
-        this.fsm.pinned = false;
+        this.setPinned(false);
         State.updateTask("integration_claude", "working");
         State.setPillBadge("integration_claude", null);
         this.setView(State.defaultView());
@@ -228,17 +231,18 @@ export class Island {
     this.fsm.onTransition = (from, to) => {
       switch (to) {
         case "hidden":
+          if (from === "coucou") this.greeting.interrupt();
           this.setMode("hidden");
           break;
         case "petit":
           if (from === "coucou") this.greeting.interrupt();
           else if (from === "hidden") Sound.play("peek");
           this.setMode("compact");
-          if (from === "coucou") State.view = State.defaultView();
+          if (from === "coucou") State.view = State.pendingApproval ? "approval" : State.defaultView();
           if (!this.wasInIsland) this.fsm.mouseLeft();
           break;
         case "home":
-          this.expand(State.defaultView());
+          this.expand(State.pendingApproval ? "approval" : State.defaultView());
           if (!this.wasInIsland) this.fsm.mouseLeft();
           break;
         case "coucou":
@@ -263,7 +267,10 @@ export class Island {
     if (mode === "expanded") Sound.play("open");
     if (prev === "expanded") {
       Sound.play("close");
-      State.isPinned = false;
+      if (State.view === "prompt") {
+        this.views.get("prompt")?.el.querySelector<HTMLInputElement>("input.chat-input")?.blur();
+        this.syncInteraction();
+      }
       void Bridge.focusWindow(false);
     }
     if (mode !== "expanded") {
@@ -289,6 +296,7 @@ export class Island {
   }
 
   expand(view: IslandViewName) {
+    if (State.pendingApproval && view !== "approval") view = "approval";
     this.stopSequenceIfLeaving(view);
     State.view = view;
     if (State.mode !== "expanded") this.setMode("expanded");
@@ -299,6 +307,7 @@ export class Island {
   }
 
   setView(view: IslandViewName) {
+    if (State.pendingApproval && view !== "approval") return;
     this.stopSequenceIfLeaving(view);
     if (State.mode !== "expanded") {
       this.fsm.forceHome();
@@ -315,8 +324,7 @@ export class Island {
   }
 
   collapse() {
-    State.isPinned = false;
-    this.fsm.pinned = false;
+    if (State.isPinned || State.pendingApproval) return;
     // Drive the state machine rather than the mode: setting the mode behind its
     // back left it thinking the island was still open, and a click on the compact
     // island then did nothing — the island could never be reopened.
@@ -325,25 +333,52 @@ export class Island {
 
   /** Alert from the hook server: open on this view. Pinned alerts never auto-close. */
   alert(view: IslandViewName) {
-    this.fsm.pinned = State.isPinned;
+    if (State.pendingApproval) view = "approval";
+    this.fsm.setPinned(State.isPinned || State.pendingApproval !== null);
     this.fsm.forceHome();
     this.expand(view);
   }
 
   reveal() {
+    this.fsm.setPinned(State.isPinned || State.pendingApproval !== null);
     this.fsm.reveal();
+  }
+
+  /** Keep the UI and FSM pin guards synchronized for focused and compact badges. */
+  setPinned(pinned: boolean) {
+    State.isPinned = pinned;
+    this.fsm.setPinned(pinned);
+    if (pinned) {
+      this.homeCollapseAt = null;
+      if (this.fileDragActive) {
+        State.fileDragOver = false;
+        this.engine.animateMorph(0);
+        UploadSeq.deactivate();
+      }
+    } else if (!this.wasInIsland && !this.interactionActive) {
+      this.fsm.mouseLeft();
+      if (this.fsm.state === "home") {
+        this.homeCollapseAt = performance.now() + State.settings.autoCloseInterval * 1000;
+      }
+    }
+    State.notify();
   }
 
   /** An alert stopped waiting for an answer: let the island auto-close again. */
   dropPin() {
-    this.fsm.pinned = false;
+    this.setPinned(false);
   }
 
   // ── File drop ───────────────────────────────────────────────────────────────
 
   private onDragDrop(e: { type: string; paths?: string[] }) {
     if (e.type !== "over") void Bridge.log(`drag ${e.type} ${e.paths?.length ?? 0} file(s)`);
-    if (State.paused) return;
+    if (e.type === "enter" || e.type === "over") this.beginFileDrag();
+    if (e.type === "drop") this.endFileDrag();
+    if (State.paused || State.pendingApproval) {
+      if (e.type === "leave" || e.type === "drop") this.clearDragPresentation();
+      return;
+    }
     switch (e.type) {
       case "enter":
       case "over": {
@@ -375,6 +410,69 @@ export class Island {
         }
         this.swallow(path);
         break;
+      }
+    }
+  }
+
+  private beginFileDrag() {
+    if (this.fileDragActive) return;
+    this.fileDragActive = true;
+    this.dragGeneration++;
+    void Bridge.setFileDragActive(true);
+    this.syncInteraction();
+  }
+
+  private endFileDrag() {
+    if (!this.fileDragActive) return;
+    this.fileDragActive = false;
+    this.dragGeneration++;
+    void Bridge.setFileDragActive(false);
+    this.syncInteraction();
+  }
+
+  private clearDragPresentation() {
+    if (!State.fileDragOver) return;
+    State.fileDragOver = false;
+    this.engine.animateMorph(0);
+    UploadSeq.exitZone();
+    State.notify();
+  }
+
+  private onFileDragCancelled() {
+    const generation = this.dragGeneration;
+    window.setTimeout(() => {
+      if (!this.fileDragActive || generation !== this.dragGeneration) return;
+      this.clearDragPresentation();
+      UploadSeq.deactivate();
+      if (!State.pendingApproval && State.mode === "expanded" && UPLOAD_VIEWS.has(State.view)) {
+        this.setView(State.defaultView());
+      }
+      this.endFileDrag();
+    }, 180);
+  }
+
+  private syncInteraction() {
+    const prompt = this.views?.get("prompt")?.el;
+    const input = prompt?.querySelector("input.chat-input");
+    const typing = State.view === "prompt" && document.hasFocus() &&
+      document.activeElement === input;
+    if (typing !== this.textFocusActive) {
+      this.textFocusActive = typing;
+      void Bridge.focusWindow(typing);
+    }
+    const active = typing || this.fileDragActive;
+    if (active === this.interactionActive) return;
+    this.interactionActive = active;
+    this.fsm.setInteracting(active);
+    if (active) {
+      this.homeCollapseAt = null;
+      this.countdown.style.width = "0px";
+    } else {
+      if (!this.wasInIsland && !this.fsm.pinned) {
+        this.fsm.mouseLeft();
+        if (this.fsm.state === "home") {
+          this.homeCollapseAt = performance.now() + State.settings.autoCloseInterval * 1000;
+        }
       }
     }
   }
@@ -534,6 +632,9 @@ export class Island {
     this.islandEl.addEventListener("mousedown", (e) => {
       Sound.resume();
       State.lastActivity = performance.now();
+      if (State.view === "prompt" && e.target instanceof Element && e.target.closest(".chat-input")) {
+        void Bridge.focusWindow(true);
+      }
       if (State.mode !== "expanded") {
         this.fsm.click();
         return;
@@ -545,11 +646,19 @@ export class Island {
     });
 
     window.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && State.mode === "expanded" && !State.isPinned) this.collapse();
+      if (e.key === "Escape" && State.mode === "expanded" && !State.isPinned && !State.pendingApproval) this.collapse();
       State.lastActivity = performance.now();
     });
 
+    window.addEventListener("focusin", () => this.syncInteraction());
+    window.addEventListener("focusout", () => window.setTimeout(() => this.syncInteraction(), 0));
+    window.addEventListener("blur", () => {
+      this.syncInteraction();
+      if (State.view === "prompt") void Bridge.focusWindow(false);
+    });
+
     void onDragDrop((e) => this.onDragDrop(e));
+    void onEvent<null>("file-drag-cancelled", () => this.onFileDragCancelled());
 
     // Outside Tauri (plain browser) drive the cursor from DOM events so the
     // island can be inspected with `npm run dev`.
@@ -581,7 +690,7 @@ export class Island {
     }
     if (!inIsland && this.wasInIsland) {
       this.fsm.mouseLeft();
-      if (this.fsm.state === "home" && !State.isPinned) {
+      if (this.fsm.state === "home" && !State.isPinned && !this.interactionActive) {
         this.homeCollapseAt = performance.now() + State.settings.autoCloseInterval * 1000;
       }
     }
@@ -808,7 +917,7 @@ export class Island {
   }
 
   private updateCountdown(nowMs: number) {
-    if (State.mode !== "expanded" || State.isPinned || this.homeCollapseAt == null) {
+    if (State.mode !== "expanded" || State.isPinned || this.interactionActive || this.homeCollapseAt == null) {
       this.countdown.style.width = "0px";
       return;
     }
@@ -839,15 +948,16 @@ export class Island {
     // The chat is the only view with a text field, so it is the only time the
     // island is allowed to take keyboard focus.
     if (this.lastSyncedView !== State.view) {
-      const wasChat = this.lastSyncedView === "prompt";
       this.lastSyncedView = State.view;
       if (State.view === "prompt") {
         void Bridge.focusWindow(true);
-        window.setTimeout(() => this.views.get("prompt")?.focus?.(), 120);
-      } else if (wasChat) {
-        void Bridge.focusWindow(false);
+        window.setTimeout(() => {
+          if (State.view === "prompt" && document.hasFocus()) this.views.get("prompt")?.focus?.();
+        }, 120);
       }
     }
+
+    this.syncInteraction();
 
     // Compact mini grid
     const showGrid = State.mode === "compact";

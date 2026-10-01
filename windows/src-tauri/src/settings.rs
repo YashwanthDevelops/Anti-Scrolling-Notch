@@ -6,14 +6,19 @@ use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(default)]
 pub struct Settings {
     pub sound_enabled: bool,
     pub sound_volume: f64,
     pub auto_close_interval: f64,
     pub absence_interval: f64,
     pub active_integrations: Vec<String>,
-    /// "primary" = the main display, "cursor" = whichever display the mouse is on.
+    /// "primary", "cursor", or "monitor:<Windows display device name>".
     pub screen: String,
+    /// Distance from the selected display's top edge, in logical pixels.
+    pub edge_offset: f64,
+    /// Tauri accelerator syntax; kept as text so older settings remain readable.
+    pub toggle_shortcut: String,
     pub autostart: bool,
     pub hooks_installed: bool,
     /// Claude model used by the chat. Changeable in the settings window.
@@ -24,6 +29,10 @@ pub struct Settings {
 
 fn default_model() -> String {
     crate::claude::DEFAULT_MODEL.to_string()
+}
+
+fn default_toggle_shortcut() -> String {
+    "CommandOrControl+Alt+Shift+Space".into()
 }
 
 impl Default for Settings {
@@ -40,6 +49,8 @@ impl Default for Settings {
                 "integration_github".into(),
             ],
             screen: "primary".into(),
+            edge_offset: 0.0,
+            toggle_shortcut: default_toggle_shortcut(),
             autostart: false,
             hooks_installed: false,
             model: default_model(),
@@ -114,5 +125,40 @@ mod tests {
                 r"C:\Users\Tester\AppData\Local\Anti-Scrolling-Notch\bin\anti-scrolling-notch-hook.exe"
             )
         );
+    }
+
+    #[test]
+    fn old_settings_receive_new_shell_defaults() {
+        let old = r#"{
+            "soundEnabled": true,
+            "soundVolume": 0.12,
+            "autoCloseInterval": 15.0,
+            "absenceInterval": 180.0,
+            "activeIntegrations": [],
+            "screen": "primary",
+            "autostart": false,
+            "hooksInstalled": false,
+            "model": "claude-opus-5"
+        }"#;
+        let settings: Settings = serde_json::from_str(old).unwrap();
+        assert_eq!(settings.edge_offset, 0.0);
+        assert_eq!(settings.toggle_shortcut, default_toggle_shortcut());
+    }
+
+    #[test]
+    fn placement_and_shortcut_settings_round_trip_through_json() {
+        let settings = Settings {
+            screen: "monitor:\\\\.\\DISPLAY2".into(),
+            edge_offset: 48.0,
+            toggle_shortcut: "Control+Alt+Shift+Space".into(),
+            ..Settings::default()
+        };
+
+        let serialized = serde_json::to_vec(&settings).unwrap();
+        let restored: Settings = serde_json::from_slice(&serialized).unwrap();
+
+        assert_eq!(restored.screen, settings.screen);
+        assert_eq!(restored.edge_offset, settings.edge_offset);
+        assert_eq!(restored.toggle_shortcut, settings.toggle_shortcut);
     }
 }

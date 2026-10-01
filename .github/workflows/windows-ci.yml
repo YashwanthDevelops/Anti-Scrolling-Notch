@@ -133,6 +133,9 @@ jobs:
       - name: Test frontend capability gates
         run: npm run test:capabilities
 
+      - name: Test island close and pin guards
+        run: npm run test:shell
+
       - name: Validate product/runtime identity
         run: npm run test:identity
 

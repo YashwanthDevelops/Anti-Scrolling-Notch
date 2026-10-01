@@ -250,7 +250,7 @@ function handleHook(island: Island, payload: HookPayload) {
       // line is synchronous, so the card really is up by the time it lands.
       if (requestId) void Bridge.approvalAck(requestId);
       State.updateTask(CLAUDE_ID, "approval");
-      State.isPinned = true;
+      island.setPinned(true);
       Sound.play("approval");
       if (focused) {
         island.alert("approval");
@@ -267,7 +267,6 @@ function handleHook(island: Island, payload: HookPayload) {
         pendingTimeout = null;
         if (!State.pendingApproval) return;
         State.pendingApproval = null;
-        State.isPinned = false;
         island.dropPin();
         State.updateTask(CLAUDE_ID, "working");
         State.setPillBadge(CLAUDE_ID, null);

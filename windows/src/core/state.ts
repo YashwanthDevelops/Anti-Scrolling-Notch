@@ -88,7 +88,10 @@ export interface Settings {
   autoCloseInterval: number;
   absenceInterval: number;
   activeIntegrations: string[];
-  screen: "primary" | "cursor";
+  /** primary, cursor, or monitor:<Windows display name>. */
+  screen: string;
+  edgeOffset: number;
+  toggleShortcut: string;
   autostart: boolean;
   hooksInstalled: boolean;
   /** Claude model used by the chat. */
@@ -104,6 +107,8 @@ export const DEFAULT_SETTINGS: Settings = {
     "integration_resend", "integration_n8n", "integration_vercel", "integration_github",
   ],
   screen: "primary",
+  edgeOffset: 0,
+  toggleShortcut: "CommandOrControl+Alt+Shift+Space",
   autostart: false,
   hooksInstalled: false,
   model: "claude-opus-5",

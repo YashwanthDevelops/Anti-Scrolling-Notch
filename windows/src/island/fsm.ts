@@ -18,6 +18,8 @@ export class IslandStateMachine {
   greetHoverCollapseDelay = 10;
   /** An alert waiting for an answer stays open, even when the mouse leaves. */
   pinned = false;
+  /** Text entry and OLE file drags suspend pointer-leave timers. */
+  interacting = false;
 
   private petitHide: number | null = null;
   private homeCollapse: number | null = null;
@@ -49,6 +51,7 @@ export class IslandStateMachine {
   }
 
   mouseLeft() {
+    if (this.interacting) return;
     switch (this.state) {
       case "hidden":
         break;
@@ -69,6 +72,22 @@ export class IslandStateMachine {
     if (this.state !== "petit") return;
     this.cancelTimers();
     this.transition("home");
+  }
+
+  /** Cycle the hotkey through hidden, compact and expanded shell states. */
+  toggle() {
+    switch (this.state) {
+      case "hidden":
+        this.reveal();
+        break;
+      case "petit":
+        this.click();
+        break;
+      case "home":
+      case "coucou":
+        this.forceHidden();
+        break;
+    }
   }
 
   /** Greeting animation finished (T.end). Doesn't override a running hover timer. */
@@ -93,31 +112,52 @@ export class IslandStateMachine {
 
   /// Explicit close (OK button, Escape, an alert being answered).
   forcePetit() {
+    if (this.pinned) return;
     this.cancelTimers();
     this.transition("petit");
   }
 
   forceHidden() {
+    if (this.pinned) return;
     this.cancelTimers();
     this.transition("hidden");
+  }
+
+  setPinned(pinned: boolean) {
+    this.pinned = pinned;
+    if (pinned) {
+      this.clear("petitHide");
+      this.clear("homeCollapse");
+      this.clear("greetCollapse");
+    }
+  }
+
+  setInteracting(interacting: boolean) {
+    this.interacting = interacting;
+    if (interacting) {
+      this.clear("petitHide");
+      this.clear("homeCollapse");
+      this.clear("greetCollapse");
+    }
   }
 
   // ── Timers ──────────────────────────────────────────────────────────────────
 
   private schedulePetitHide() {
     this.clear("petitHide");
+    if (this.pinned || this.interacting) return;
     this.petitHide = window.setTimeout(() => {
       this.petitHide = null;
-      if (this.state === "petit") this.transition("hidden");
+      if (this.state === "petit" && !this.pinned && !this.interacting) this.transition("hidden");
     }, this.petitToHiddenDelay * 1000);
   }
 
   private scheduleHomeCollapse() {
     this.clear("homeCollapse");
-    if (this.pinned) return;
+    if (this.pinned || this.interacting) return;
     this.homeCollapse = window.setTimeout(() => {
       this.homeCollapse = null;
-      if (this.state === "home") this.transition("petit");
+      if (this.state === "home" && !this.pinned && !this.interacting) this.transition("petit");
     }, this.homeToPetitDelay * 1000);
   }
 

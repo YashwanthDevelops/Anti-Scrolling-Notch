@@ -3,12 +3,14 @@
 // integrations land here too in a later stage.
 
 import "./settings.css";
-import { Bridge, onEvent, type HookStatus } from "../core/bridge";
+import { Bridge, onEvent, type HookStatus, type MonitorOption, type ToggleShortcutStatus } from "../core/bridge";
 import { DEFAULT_SETTINGS, type Settings } from "../core/state";
 import { h, clear } from "../views/dom";
 
 let settings: Settings = { ...DEFAULT_SETTINGS };
 let version = "";
+let monitors: MonitorOption[] = [];
+let shortcutStatus: ToggleShortcutStatus = { active: null, error: null };
 
 const root = document.getElementById("settings-root")!;
 
@@ -382,14 +384,90 @@ function generalSection(): HTMLElement {
   });
 
   const screen = h("select", {}) as HTMLSelectElement;
-  screen.append(
-    h("option", { value: "primary", text: "Main display" }),
-    h("option", { value: "cursor", text: "Display under the cursor" }),
-  );
-  screen.value = settings.screen;
+  const refreshScreenOptions = () => {
+    const selection = settings.screen;
+    clear(screen);
+    screen.append(
+      h("option", { value: "primary", text: "Main display" }),
+      h("option", { value: "cursor", text: "Display under the cursor" }),
+    );
+    for (const monitor of monitors) {
+      screen.append(h("option", {
+        value: `monitor:${monitor.id}`,
+        text: `${monitor.label} · ${Math.round(monitor.scale * 100)}%`,
+      }));
+    }
+    if (selection.startsWith("monitor:") && !monitors.some((m) => `monitor:${m.id}` === selection)) {
+      screen.append(h("option", {
+        value: selection,
+        text: "Saved display unavailable — using main display",
+        disabled: true,
+      }));
+    }
+    screen.value = selection;
+  };
+  refreshScreenOptions();
   screen.addEventListener("change", () => {
-    settings.screen = screen.value as Settings["screen"];
+    settings.screen = screen.value;
     void save();
+  });
+
+  void onEvent<null>("screen-changed", async () => {
+    const available = await Bridge.monitorOptions();
+    if (available) {
+      monitors = available;
+      refreshScreenOptions();
+    }
+  });
+
+  const edgeOffset = h("input", {
+    type: "number", min: "0", max: "120", step: "1",
+    value: String(settings.edgeOffset),
+    style: "width:76px",
+  }) as HTMLInputElement;
+  edgeOffset.addEventListener("change", () => {
+    settings.edgeOffset = Math.max(0, Math.min(120, Number(edgeOffset.value) || 0));
+    edgeOffset.value = String(settings.edgeOffset);
+    void save();
+  });
+
+  const shortcut = h("input", {
+    type: "text",
+    value: settings.toggleShortcut,
+    placeholder: "CommandOrControl+Alt+Shift+Space",
+    autocomplete: "off",
+    spellcheck: "false",
+    style: "width:300px;max-width:100%",
+  }) as HTMLInputElement;
+  const shortcutFeedback = h("div", { class: "notice" });
+  const updateShortcutFeedback = () => {
+    if (shortcutStatus.error) {
+      shortcutFeedback.className = "notice warn";
+      shortcutFeedback.textContent = shortcutStatus.error;
+    } else if (shortcutStatus.active) {
+      shortcutFeedback.className = "notice ok";
+      shortcutFeedback.textContent = `Active: ${shortcutStatus.active}`;
+    } else {
+      shortcutFeedback.className = "notice warn";
+      shortcutFeedback.textContent = "No global shortcut is active.";
+    }
+  };
+  updateShortcutFeedback();
+  const applyShortcut = h("button", { class: "primary", text: "Apply" });
+  applyShortcut.addEventListener("click", async () => {
+    applyShortcut.disabled = true;
+    const previous = shortcutStatus.active;
+    try {
+      shortcutStatus = await Bridge.setToggleShortcut(shortcut.value);
+      settings.toggleShortcut = shortcut.value.trim();
+      shortcut.value = settings.toggleShortcut;
+    } catch (err) {
+      const fallback = previous ? ` ${previous} remains active.` : " No global shortcut is active.";
+      shortcutStatus.error = `${String(err).replace(/^Error:\s*/, "")}${fallback}`;
+    } finally {
+      updateShortcutFeedback();
+      applyShortcut.disabled = false;
+    }
   });
 
   return h(
@@ -411,6 +489,17 @@ function generalSection(): HTMLElement {
       screen,
     ),
     h("div", { class: "row" },
+      h("label", { text: "Top edge offset" }),
+      edgeOffset,
+      h("span", { class: "hint", text: "logical pixels (0–120)" }),
+    ),
+    h("div", { class: "row" },
+      h("label", { text: "Toggle shortcut" }),
+      shortcut,
+      applyShortcut,
+    ),
+    shortcutFeedback,
+    h("div", { class: "row" },
       h("label", { text: "Launch at startup" }),
       toggle(settings.autostart, (v) => { settings.autostart = v; void save(); }),
     ),
@@ -424,6 +513,8 @@ async function main() {
   if (boot) {
     settings = { ...settings, ...boot.settings };
     version = boot.version;
+    monitors = boot.monitors;
+    shortcutStatus = boot.shortcutStatus;
   }
   const status = (await Bridge.hooksStatus()) ?? {
     installed: false, settingsPath: "", hookPath: "", hookReady: false,
