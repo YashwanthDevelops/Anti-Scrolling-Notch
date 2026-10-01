@@ -50,6 +50,9 @@ export const Bridge = {
 
   openUrl: (url: string) => call<void>("open_url", { url }),
 
+  /** Best-effort activation of the Codex app home; there are no verified chat deep links. */
+  openCodex: () => callOrThrow<number>("open_codex"),
+
   /** "Open terminal" → opens the folder in VS Code when `code` is on PATH. */
   openInVSCode: (path: string | null) => call<boolean>("open_in_vscode", { path }),
 

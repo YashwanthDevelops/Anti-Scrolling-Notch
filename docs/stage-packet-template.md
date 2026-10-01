@@ -50,5 +50,3 @@ Development retains inherited visual resources as replaceable assets; original a
 - Link this packet in the PR. Report behavior/failure/recovery/tests and verify remote commit SHA.
 - Review the final diff, pass required checks and integrate the bounded PR before starting the next packet.
 - Keep the stage pending until all its required in-scope packet gates pass. QA and delivery still require Stages 11–12 for the exact release profile/version.
-
-Next planned packet: Stage 2 Windows baseline (`BASE-01` through `BASE-07`) on `work/windows-baseline`. It excludes app feature implementation, Codex hook installation, service credentials and product release publication.

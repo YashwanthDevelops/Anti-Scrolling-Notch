@@ -2,6 +2,7 @@
 
 mod claude;
 mod codex_pipe;
+mod codex_navigation;
 mod files;
 mod hooks;
 mod integrations;
@@ -131,6 +132,13 @@ fn open_url(url: String) {
         .args(["url.dll,FileProtocolHandler", &url])
         .creation_flags(CREATE_NO_WINDOW)
         .spawn();
+}
+
+/// Best-effort return to the registered Codex desktop app's generic surface.
+/// Exact conversation/session destinations are not verified by the hook adapter.
+#[tauri::command]
+fn open_codex() -> Result<u32, String> {
+    codex_navigation::activate_codex()
 }
 
 /// "Open terminal" opens the working folder in VS Code when `code` is on PATH,
@@ -389,6 +397,7 @@ pub fn run() {
             focus_window,
             reposition,
             open_url,
+            open_codex,
             open_in_vscode,
             quit_app,
             hooks_status,

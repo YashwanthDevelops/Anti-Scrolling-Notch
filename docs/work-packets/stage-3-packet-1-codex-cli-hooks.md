@@ -7,7 +7,7 @@
 | Task IDs | COMPAT-01 (CLI slice), COMPAT-02 (CLI slice), COMPAT-03 (observer contract), COMPAT-09 (sanitized hook fixtures/matrix slice) |
 | Branch / PR | `work/stage-3-codex-hooks` → Anti-Scrolling-Notch `main` |
 | Dependencies | Stage 2 packet integrated at `965376b39af1d0351fe479778dbfa5a1f637070b`; project-owner BASE-05 acceptance recorded |
-| Status | Implementation and checks complete; commit pushed, Windows CI and Build passed, PR #5 open for review/integration |
+| Status | Integrated into `main` by merge commit `553e03ef70848df672cbc0fad9efb753de62ae6c`; PR #5 and required checks completed successfully |
 | User outcome | Implement a backend-only Codex CLI observer adapter limited to the four lifecycle events delivered by the successful isolated loopback turn, while keeping every unverified event disabled. |
 | In scope | Record the installed CLI version and accepted loopback hook evidence; preserve a sanitized recorder projection; implement a strict four-event adapter contract and separate Codex named-pipe path; verify malformed/unsupported input, neutral output and pipe delivery with isolated fixture replay; document that the Ollama-specific test was not performed because Ollama is not installed. |
 | UI/assets contract | No app UI, Coucou/Mochi assets, sounds, animation timing or layout changes. The packet adds only a passive backend adapter and does not change the Claude hook path. |
