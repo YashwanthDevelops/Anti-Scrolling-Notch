@@ -114,9 +114,18 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '22.23.2'
           cache: npm
           cache-dependency-path: windows/package-lock.json
+
+      - name: Verify pinned Node and npm versions
+        shell: pwsh
+        run: |
+          $nodeVersion = node --version
+          $npmVersion = npm --version
+          Write-Output "Node: $nodeVersion; npm: $npmVersion"
+          if ($nodeVersion -ne 'v22.23.2') { throw "Expected Node v22.23.2, found $nodeVersion" }
+          if ($npmVersion -ne '10.9.8') { throw "Expected npm 10.9.8, found $npmVersion" }
 
       - name: Install locked frontend dependencies
         run: npm ci
@@ -140,7 +149,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.98.1
+
+      - name: Verify pinned Rust and Cargo versions
+        shell: pwsh
+        run: |
+          $rustcVersion = rustc --version
+          $cargoVersion = cargo --version
+          Write-Output "$rustcVersion; $cargoVersion"
+          if (-not $rustcVersion.StartsWith('rustc 1.98.1 ')) { throw "Expected rustc 1.98.1, found $rustcVersion" }
+          if (-not $cargoVersion.StartsWith('cargo 1.98.1 ')) { throw "Expected Cargo 1.98.1, found $cargoVersion" }
 
       - name: Cache Cargo dependencies and build output
         uses: actions/cache@v4
@@ -149,8 +167,8 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             windows/target
-          key: windows-cargo-${{ hashFiles('windows/Cargo.lock') }}
-          restore-keys: windows-cargo-
+          key: windows-cargo-1.98.1-${{ hashFiles('windows/Cargo.lock') }}
+          restore-keys: windows-cargo-1.98.1-
 
       - name: Build the hook resource required by the Tauri build script
         run: cargo build --release -p coucou-hook

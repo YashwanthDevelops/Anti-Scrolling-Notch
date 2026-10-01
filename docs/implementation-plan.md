@@ -173,12 +173,12 @@ After this initial import, future development can simply clone your repository. 
 Tasks:
 
 - [x] **BASE-01** Verify Git, GitHub CLI, Node/npm, Rust/Cargo and Codex availability. Record exact versions in `docs/development-baseline.md`.
-- [ ] **BASE-02** Install missing Microsoft C++ build tools with Desktop development with C++, a Windows SDK, Rust MSVC toolchain and WebView2. Use Node 22 initially to match upstream CI; pin the validated toolchain after the first successful build.
+- [x] **BASE-02** Install and verify Visual Studio 2026 Desktop development with C++, x64 MSVC tools and Windows SDK 10.0.26100.0, the Rust MSVC toolchain, WebView2 and isolated Node v22.23.2/npm 10.9.8. Pin validated Node/Rust versions in Windows CI after the successful local native build.
 - [x] **BASE-03** Install frontend dependencies using `npm ci` and the checked-in lockfile. Keep dependency upgrades separate from the initial port.
 - [x] **BASE-04** Build/type-check frontend, run the existing Rust tests and record formatting/lint baseline. Existing failures must be identified and fixed or explicitly tracked before unrelated work begins.
 - [ ] **BASE-05** Run the native Windows development app locally. Verify tray, hidden/compact/expanded/greeting states, settings, sound, startup toggle and file drop; capture the small fixed-DPI visual/motion reference during that same run. Do not install Claude hooks or enter service keys merely to inspect the baseline UI.
-- [ ] **BASE-06** Build the original installer locally to prove NSIS/toolchain readiness. Treat it as a local baseline artifact, not your distributable app.
-- [x] **BASE-07** Add Windows PR CI for relevant frontend type/build checks and Rust tests, affected-path selection, dependency caches and superseding outdated runs on the same PR. Record durations and separate fast checks from native/package checks; docs-only paths should use document checks. Later require formatting/clippy after recorded upstream issues are resolved. Release workflow cancellation is separate from PR supersession.
+- [x] **BASE-06** Build the original installer locally to prove NSIS/toolchain readiness. Treat it as a local baseline artifact, not your distributable app.
+- [ ] **BASE-07** Add Windows PR CI for relevant frontend type/build checks and Rust tests, affected-path selection, dependency caches and superseding outdated runs on the same PR. Record durations and separate fast checks from native/package checks; docs-only paths should use document checks. Later require formatting/clippy after recorded upstream issues are resolved. Release workflow cancellation is separate from PR supersession. Exact pinned Node/Rust CI validation is in progress.
 
 Commands run from your development checkout's `windows` directory during implementation:
 
@@ -582,4 +582,4 @@ Use the checklist against a declared scope/version. MVP may pass its rows while 
 - [ ] Interactive v1: its Stage 11 QA and Stage 12 delivery gates pass, release blockers are closed and v1.0 is published.
 - [ ] Selected extensions: separately verified capabilities and delivery gates pass before their functionality ships.
 
-The source/planning import is already published. The next implementation packet is **Stage 2: BASE-01 through BASE-07 on `work/windows-baseline`**. Create its packet before coding; establish the reproducible build, then proceed to the MVP capability gate. All implementation commits and pushes belong to your Anti-Scrolling-Notch repository.
+Stage 2 is active on `work/windows-baseline`. The VS2026 toolchain, frontend/Rust checks, local Tauri debug launch and local NSIS installer build now have evidence. BASE-05 still needs the actual tray/state/settings/sound/startup/drop interaction and fixed-DPI visual/motion reference; BASE-07 awaits validation of the newly pinned CI toolchain. Do not start Stage 3 until the Stage 2 packet gate passes. All implementation commits and pushes belong to your Anti-Scrolling-Notch repository.
