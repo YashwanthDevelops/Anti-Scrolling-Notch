@@ -130,6 +130,9 @@ jobs:
       - name: Install locked frontend dependencies
         run: npm ci
 
+      - name: Test frontend capability gates
+        run: npm run test:capabilities
+
       - name: Type-check and bundle the frontend
         shell: pwsh
         run: |

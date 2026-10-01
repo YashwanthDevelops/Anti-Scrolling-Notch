@@ -19,6 +19,7 @@ async function main() {
   const boot = await Bridge.boot();
   if (boot) {
     State.settings = { ...State.settings, ...boot.settings };
+    State.capabilities = boot.capabilities;
   }
   island.applySettings();
   State.loadIntegrationTasks();
