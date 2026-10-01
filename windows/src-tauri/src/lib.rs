@@ -1,6 +1,7 @@
 // Coucou for Windows — app wiring and the commands the island calls.
 
 mod claude;
+mod codex_pipe;
 mod files;
 mod hooks;
 mod integrations;
@@ -426,6 +427,7 @@ pub fn run() {
             log::line(format!("--- Coucou {} started ---", env!("CARGO_PKG_VERSION")));
             hooks::ensure_hook_exe(&handle);
             pipe::start(handle.clone());
+            codex_pipe::start();
             integrations::start(handle.clone());
             Ok(())
         })
