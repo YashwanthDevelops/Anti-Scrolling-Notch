@@ -1,4 +1,4 @@
-//! coucou-hook — the relay Claude Code runs on every hook event.
+//! coucou-hook — legacy Claude relay plus a separate Codex observer mode.
 //!
 //! Reads the hook JSON on stdin, adds a little terminal context, and hands it to
 //! Coucou over the named pipe `\\.\pipe\coucou-<sid>`.
@@ -13,11 +13,14 @@
 //!   island is the whole point. No answer means empty stdout, and Claude Code
 //!   asks in the terminal exactly as if Coucou were not installed.
 //!
-//! Usage: `coucou-hook <EventName>` (the name is also read from the JSON).
+//! Usage: `coucou-hook <EventName>` for Claude Code, or
+//! `coucou-hook --codex-observer` for the verified Codex lifecycle subset.
 
 use std::io::{Read, Write};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
+
+use codex_hook_contract::{parse_hook_payload, CodexHookObservation, MAX_HOOK_INPUT_BYTES};
 
 /// Budget for getting a pipe connection. Beyond this Claude Code wins, always.
 const CONNECT_TIMEOUT: Duration = Duration::from_millis(300);
@@ -48,14 +51,29 @@ fn pipe_path() -> String {
     format!(r"\\.\pipe\coucou-{key}")
 }
 
+/// Codex's observing adapter uses a separate backend-only pipe. It must never
+/// enter the inherited Claude event listener or its approval/UI handlers.
+fn codex_pipe_path() -> String {
+    let key = win::current_user_sid()
+        .unwrap_or_else(|| std::env::var("USERNAME").unwrap_or_else(|_| "user".into()));
+    format!(r"\\.\pipe\coucou-codex-{key}")
+}
+
 /// Opens the pipe. Retries only while the server is busy: any other error means
 /// there is nothing to talk to, and waiting would only delay Claude Code.
 fn connect() -> Option<std::fs::File> {
+    connect_to(&pipe_path())
+}
+
+fn connect_to(path: &str) -> Option<std::fs::File> {
     use std::os::windows::io::AsRawHandle;
-    let path = pipe_path();
     let deadline = Instant::now() + CONNECT_TIMEOUT;
     loop {
-        match std::fs::OpenOptions::new().read(true).write(true).open(&path) {
+        match std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(path)
+        {
             Ok(file) => {
                 let handle = windows::Win32::Foundation::HANDLE(file.as_raw_handle());
                 // Somebody else's server on our pipe name gets nothing from us.
@@ -72,10 +90,21 @@ fn connect() -> Option<std::fs::File> {
 }
 
 fn main() {
-    let Some((payload, event)) = read_event() else { std::process::exit(0) };
+    if std::env::args().nth(1).as_deref() == Some("--codex-observer") {
+        run_codex_observer();
+        return;
+    }
+
+    let Some((payload, event)) = read_event() else {
+        std::process::exit(0)
+    };
 
     let waits_for_answer = event == "PermissionRequest";
-    let budget = if waits_for_answer { DECISION_BUDGET } else { FIRE_AND_FORGET_BUDGET };
+    let budget = if waits_for_answer {
+        DECISION_BUDGET
+    } else {
+        FIRE_AND_FORGET_BUDGET
+    };
 
     // The worker owns every blocking call. If it overruns the budget we simply
     // stop listening and exit: the process dying takes the pipe handle with it.
@@ -95,6 +124,42 @@ fn main() {
     }
     // Nothing printed: Claude Code asks in the terminal, as if we were not here.
     std::process::exit(0);
+}
+
+/// Codex observing hooks are best-effort and neutral: accept only the verified
+/// event discriminator, send a tiny versioned message to the Codex-only backend
+/// pipe, and never write hook output to stdout or wait for a decision.
+fn run_codex_observer() {
+    let mut raw = Vec::new();
+    if std::io::stdin()
+        .take((MAX_HOOK_INPUT_BYTES + 1) as u64)
+        .read_to_end(&mut raw)
+        .is_err()
+    {
+        return;
+    }
+    let Ok(observation) = parse_hook_payload(&raw) else {
+        return;
+    };
+    send_codex_observation(observation);
+}
+
+fn send_codex_observation(observation: CodexHookObservation) {
+    let Ok(mut payload) = serde_json::to_vec(&observation) else {
+        return;
+    };
+    payload.push(b'\n');
+
+    // The named-pipe open/write run on a worker so even a wedged app cannot
+    // hold the Codex turn. Closing the process drops the pending pipe handle.
+    let (tx, rx) = mpsc::channel::<bool>();
+    std::thread::spawn(move || {
+        let sent = connect_to(&codex_pipe_path())
+            .and_then(|mut pipe| pipe.write_all(&payload).ok().map(|()| pipe.flush().is_ok()))
+            .unwrap_or(false);
+        let _ = tx.send(sent);
+    });
+    let _ = rx.recv_timeout(FIRE_AND_FORGET_BUDGET);
 }
 
 /// The documented PermissionRequest output. Anything we do not recognise prints
@@ -136,7 +201,10 @@ fn read_event() -> Option<(String, String)> {
         .map(str::to_string)
         .filter(|s| !s.is_empty())
         .unwrap_or(arg_event);
-    map.insert("hook_event_name".into(), serde_json::Value::String(event.clone()));
+    map.insert(
+        "hook_event_name".into(),
+        serde_json::Value::String(event.clone()),
+    );
 
     for field in DROPPED_FIELDS {
         map.remove(*field);
@@ -244,7 +312,9 @@ mod tests {
             r#"{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":"Denied from Coucou"}}}"#
         );
         // "always" is an island concept; Claude Code just gets an allow.
-        assert!(decision_json("always").unwrap().contains(r#""behavior":"allow""#));
+        assert!(decision_json("always")
+            .unwrap()
+            .contains(r#""behavior":"allow""#));
     }
 
     #[test]

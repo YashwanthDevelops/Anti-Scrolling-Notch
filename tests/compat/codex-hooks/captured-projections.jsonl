@@ -1,0 +1,4 @@
+{"hook_event_name":"SessionStart","source":"startup","prompt_present":false}
+{"hook_event_name":"UserPromptSubmit","prompt_present":true}
+{"hook_event_name":"Stop","prompt_present":false}
+{"hook_event_name":"SessionEnd","reason":"other","prompt_present":false}
