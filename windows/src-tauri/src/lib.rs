@@ -27,7 +27,6 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
-use claude::{Chat, ChatContext, ChatReply};
 use files::DroppedFile;
 use hooks::{HookPreview, HookStatus};
 use island::{PollGate, ScreenInfo};
@@ -395,27 +394,16 @@ fn approval_decline(app: AppHandle, request_id: String) {
 
 // ── Chat, files and secrets ───────────────────────────────────────────────────
 
-/// One chat turn. The API key and any file bytes stay on the Rust side.
-#[tauri::command]
-async fn chat_send(
-    shared: State<'_, Shared>,
-    chat: State<'_, Chat>,
-    query: String,
-    context: Option<ChatContext>,
-) -> Result<ChatReply, String> {
-    let model = shared.settings.lock().unwrap().model.clone();
-    claude::send(&chat, &model, query, context).await
-}
-
-#[tauri::command]
-fn chat_reset(chat: State<Chat>) {
-    chat.reset();
-}
-
 /// Copies a dropped file into the inbox and reports its name back.
 #[tauri::command]
-fn ingest_file(path: String) -> Result<DroppedFile, String> {
-    files::ingest(&path)
+fn ingest_file(path: String, capability_generation: String) -> Result<DroppedFile, String> {
+    let current = capabilities::CapabilityRegistry::discover();
+    capabilities::execute(
+        &current,
+        &capability_generation,
+        "codex.attachmentDelivery",
+        || files::ingest(&path),
+    )
 }
 
 /// The island may only ask whether a key exists — never read it.
@@ -549,7 +537,6 @@ pub fn run() {
             shortcut_status: Mutex::new(ShortcutStatus::default()),
         })
         .manage(Pending::default())
-        .manage(Chat::default())
         .invoke_handler(tauri::generate_handler![
             boot,
             save_settings,
@@ -571,8 +558,6 @@ pub fn run() {
             approval_ack,
             approval_decline,
             log_line,
-            chat_send,
-            chat_reset,
             ingest_file,
             secret_present,
             secret_set,

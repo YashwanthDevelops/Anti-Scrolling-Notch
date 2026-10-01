@@ -7,6 +7,7 @@ import { ICONS } from "./icons";
 import { Ticker } from "./ticker";
 import { State, type AgentTask } from "../core/state";
 import { washRGBA, type IslandViewName, type Wash } from "../core/layout";
+import { capabilityRequestGeneration } from "../core/capability-guard.js";
 import { createMiniBot, pruneMiniBots } from "../mochi/minibots";
 import { buildPrompt } from "./chat";
 import { buildChoose, buildUpload, buildUploading } from "./upload";
@@ -104,6 +105,12 @@ export function buildHeader(actions: ViewActions): ViewHost {
       tabHome.classList.toggle("on", v === "overview" || v === "empty");
       tabChat.classList.toggle("on", v === "prompt");
       tabDrop.classList.toggle("on", v === "upload");
+      tabChat.title = capabilityRequestGeneration(State.capabilities, "codex.managedSession")
+        ? "Ask Codex"
+        : "Companion chat is unavailable. Continue in Codex.";
+      tabDrop.title = capabilityRequestGeneration(State.capabilities, "codex.attachmentDelivery")
+        ? "Drop a file"
+        : "File delivery is unavailable. Attach files in Codex.";
       gearBtn.classList.toggle("on", v === "settings");
       clear(gearBtn);
       gearBtn.append(svg(v === "settings" ? ICONS.gearFill : ICONS.gear, 14));

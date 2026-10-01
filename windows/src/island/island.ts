@@ -3,6 +3,8 @@
 
 import { Tracked, Spring, clamp } from "../core/anim";
 import { Bridge, IS_TAURI, onDragDrop, onEvent } from "../core/bridge";
+import { capabilityRequestGeneration } from "../core/capability-guard.js";
+import { Motion } from "../core/motion";
 import {
   EXPANDED_CORNER, EXPANDED_W, NOTCH_W, PANEL_H, PANEL_W,
   ROUNDED_CORNER, VIEW_LAYOUTS, botGlowColor, botGlowOpacity, botPosition, chatPromptHeight,
@@ -13,7 +15,7 @@ import { Sound } from "../core/sound";
 import { State } from "../core/state";
 import { BotEngine, hexToRGB } from "../mochi/engine";
 import { Greeting } from "../mochi/greeting";
-import { createMiniBot, pruneMiniBots, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
+import { createMiniBot, pruneMiniBots, setMiniBotsReducedMotion, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
 import { UploadCanvas } from "../upload/canvas";
 import { USC, UploadSeq } from "../upload/sequence";
 import { buildHeader, buildViews, type ViewActions, type ViewHost } from "../views/views";
@@ -372,6 +374,7 @@ export class Island {
   // ── File drop ───────────────────────────────────────────────────────────────
 
   private onDragDrop(e: { type: string; paths?: string[] }) {
+    if (!capabilityRequestGeneration(State.capabilities, "codex.attachmentDelivery")) return;
     if (e.type !== "over") void Bridge.log(`drag ${e.type} ${e.paths?.length ?? 0} file(s)`);
     if (e.type === "enter" || e.type === "over") this.beginFileDrag();
     if (e.type === "drop") this.endFileDrag();
@@ -483,12 +486,11 @@ export class Island {
    * slow disk can never stall the animation — same as FileDropHandler on macOS.
    */
   private swallow(path: string) {
+    if (!capabilityRequestGeneration(State.capabilities, "codex.attachmentDelivery")) return;
     const name = path.split(/[\\/]/).pop() || "file";
     State.droppedFile = { name, path };
     State.promptContext = { kind: "file", name, path };
     State.chatHistory = [];
-    void Bridge.chatReset();
-
     UploadSeq.performDrop(State.uploadDuration);
     this.uploadTens = 0;
     this.uploadDone = false;
@@ -555,7 +557,11 @@ export class Island {
 
   private animateGeometry(shrinking: boolean) {
     const { w, h, r } = this.targetSize();
-    if (shrinking) {
+    if (Motion.reducedMotion) {
+      this.width.jump(w);
+      this.height.jump(h);
+      this.radius.jump(r);
+    } else if (shrinking) {
       this.width.curveTowards(w);
       this.height.curveTowards(h);
       this.radius.curveTowards(r);
@@ -612,7 +618,7 @@ export class Island {
         if (State.mode !== "hidden") return;
         this.collapsed = true;
         void Bridge.setCollapsed(true);
-      }, 420);
+      }, Motion.reducedMotion ? 0 : 420);
     } else if (this.collapsed) {
       // Grow the window back before the island animates open.
       this.collapsed = false;
@@ -831,7 +837,7 @@ export class Island {
       ? settling
       : settling ||
         !this.botCx.settled || !this.botCy.settled || !this.botSize.settled ||
-        greetingActive || this.engine.busy || UploadSeq.isActive;
+        (greetingActive && !Motion.reducedMotion) || this.engine.busy || UploadSeq.isActive;
 
     if (busy) {
       requestAnimationFrame(this.frame);
@@ -843,9 +849,15 @@ export class Island {
 
   private updateBotTargets() {
     const p = botPosition(State.mode, State.view, this.height.value, State.uploadProgress);
-    this.botCx.target = p.cx;
-    this.botCy.target = p.cy;
-    this.botSize.target = p.diameter / 0.6;
+    if (Motion.reducedMotion) {
+      this.botCx.set(p.cx);
+      this.botCy.set(p.cy);
+      this.botSize.set(p.diameter / 0.6);
+    } else {
+      this.botCx.target = p.cx;
+      this.botCy.target = p.cy;
+      this.botSize.target = p.diameter / 0.6;
+    }
 
     const greetingActive = State.mode === "expanded" && State.view === "greeting";
     // The drop canvas draws its own Mochi; two of them would overlap.
@@ -983,7 +995,19 @@ export class Island {
   applySettings() {
     Sound.setEnabled(State.settings.soundEnabled);
     Sound.setVolume(State.settings.soundVolume);
+    Motion.setReducedMotion(State.settings.reducedMotion);
+    this.engine.setReducedMotion(State.settings.reducedMotion);
+    setMiniBotsReducedMotion(State.settings.reducedMotion);
+    if (State.settings.reducedMotion) {
+      const { w, h, r } = this.targetSize();
+      this.width.jump(w);
+      this.height.jump(h);
+      this.radius.jump(r);
+      this.updateBotTargets();
+      this.applyGeometry();
+    }
     this.fsm.homeToPetitDelay = State.settings.autoCloseInterval;
+    this.ensureRunning();
     State.notify();
   }
 

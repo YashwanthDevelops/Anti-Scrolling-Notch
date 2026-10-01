@@ -6,6 +6,7 @@
 
 import { h, clear } from "./dom";
 import { State } from "../core/state";
+import { capabilityRequestGeneration } from "../core/capability-guard.js";
 import type { ViewActions, ViewHost } from "./views";
 
 /** Dashed rounded rect drawn as SVG so the dashes can march like on macOS. */
@@ -29,7 +30,8 @@ function dashedFrame(): SVGSVGElement {
 
 export function buildUpload(): ViewHost {
   const frame = dashedFrame();
-  const title = h("div", { class: "drop-title", text: "Drop your files here" });
+  const title = h("div", { class: "drop-title", text: "File delivery arrives with interactive v1" });
+  const hint = h("div", { class: "drop-hint", text: "Attach files in Codex for now." });
   const tags = h(
     "div",
     { class: "drop-tags" },
@@ -39,13 +41,17 @@ export function buildUpload(): ViewHost {
     "div",
     { class: "card drop-card" },
     frame,
-    h("div", { class: "drop-body" }, title, tags),
+    h("div", { class: "drop-body" }, title, hint, tags),
   );
   const el = h("div", { class: "view" }, card);
 
   return {
     el,
     sync() {
+      const available = capabilityRequestGeneration(State.capabilities, "codex.attachmentDelivery") !== null;
+      title.textContent = available ? "Drop your files here" : "File delivery arrives with interactive v1";
+      hint.textContent = available ? "" : "Attach files in Codex for now.";
+      card.classList.toggle("unavailable", !available);
       card.classList.toggle("over", State.fileDragOver);
     },
   };

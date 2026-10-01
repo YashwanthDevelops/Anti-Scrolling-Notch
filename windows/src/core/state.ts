@@ -85,6 +85,7 @@ export interface IntegrationInfo {
 export interface Settings {
   soundEnabled: boolean;
   soundVolume: number;
+  reducedMotion: boolean;
   autoCloseInterval: number;
   absenceInterval: number;
   activeIntegrations: string[];
@@ -101,6 +102,7 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   soundEnabled: true,
   soundVolume: 0.12,
+  reducedMotion: false,
   autoCloseInterval: 15,
   absenceInterval: 180,
   activeIntegrations: [

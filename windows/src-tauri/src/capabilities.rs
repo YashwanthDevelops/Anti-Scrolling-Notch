@@ -348,6 +348,22 @@ mod tests {
     }
 
     #[test]
+    fn managed_chat_and_attachment_delivery_stay_disabled_until_adapters_exist() {
+        let current = CapabilityRegistry::from_runtime(Some(verified_package()), true);
+        let action_called = Cell::new(false);
+
+        for capability_id in ["codex.managedSession", "codex.attachmentDelivery"] {
+            assert!(execute(&current, &current.generation, capability_id, || {
+                action_called.set(true);
+                Ok(())
+            })
+            .is_err());
+        }
+
+        assert!(!action_called.get());
+    }
+
+    #[test]
     fn current_verified_snapshot_can_execute_only_the_named_action() {
         let current = CapabilityRegistry::from_runtime(Some(verified_package()), true);
         let process_id = execute(&current, &current.generation, OPEN_CODEX_CAPABILITY, || {

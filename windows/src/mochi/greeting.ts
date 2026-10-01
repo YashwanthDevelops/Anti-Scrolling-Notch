@@ -2,6 +2,7 @@
 // Everything is laid out in the same 640×150 reference space as on macOS.
 
 import { Sound } from "../core/sound";
+import { Motion } from "../core/motion";
 import { COMPACT_W, NOTCH_H, NOTCH_W } from "../core/layout";
 
 // ── Timing (mirrors greeting-v2.html `T`) ─────────────────────────────────────
@@ -497,6 +498,14 @@ export class Greeting {
     this.tc = Number.POSITIVE_INFINITY;
     this.fired = false;
     this.cancelTimers();
+    if (Motion.reducedMotion) {
+      this.startMs -= T.end * 1000;
+      this.tc = T.autoLeave + 1;
+      Sound.play("greet");
+      Sound.play("blip");
+      this.fire();
+      return;
+    }
     this.timers.push(
       window.setTimeout(() => Sound.play("greet"), T.pop0 * 1000),
       window.setTimeout(() => Sound.play("blip"), T.badge * 1000),
