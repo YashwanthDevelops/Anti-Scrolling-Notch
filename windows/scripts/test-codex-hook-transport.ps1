@@ -11,6 +11,11 @@ if (-not (Test-Path -LiteralPath $HookExe -PathType Leaf)) {
 $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $pipeName = "coucou-codex-$sid"
 $utf8 = [System.Text.UTF8Encoding]::new($false)
+$repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
+$projectionPath = Join-Path $repoRoot 'tests\compat\codex-hooks\captured-projections.jsonl'
+if (-not (Test-Path -LiteralPath $projectionPath -PathType Leaf)) {
+    throw "Sanitized loopback capture projection not found: $projectionPath"
+}
 
 function Start-HookProcess([string]$Payload) {
     $start = [System.Diagnostics.ProcessStartInfo]::new()
@@ -38,12 +43,14 @@ function Assert-NeutralExit($Process) {
     if ($stderr.Length -ne 0) { throw 'Observer wrote unexpected stderr.' }
 }
 
-$cases = @(
-    @{ Name = 'SessionStart'; Payload = '{"hook_event_name":"SessionStart","source":"startup"}' },
-    @{ Name = 'UserPromptSubmit'; Payload = '{"hook_event_name":"UserPromptSubmit"}' },
-    @{ Name = 'Stop'; Payload = '{"hook_event_name":"Stop"}' },
-    @{ Name = 'SessionEnd'; Payload = '{"hook_event_name":"SessionEnd","reason":"other"}' }
-)
+$cases = @(Get-Content -LiteralPath $projectionPath | Where-Object { $_.Trim() } | ForEach-Object {
+    $projection = $_ | ConvertFrom-Json
+    if (-not $projection.hook_event_name) { throw 'Capture projection has no event name.' }
+    @{ Name = $projection.hook_event_name; Payload = $_ }
+})
+if ($cases.Count -ne 4) {
+    throw "Expected the four loopback-captured event projections; found $($cases.Count)."
+}
 
 foreach ($case in $cases) {
     $server = [System.IO.Pipes.NamedPipeServerStream]::new(

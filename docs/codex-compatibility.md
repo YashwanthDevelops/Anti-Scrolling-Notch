@@ -28,7 +28,7 @@ The Ollama-specific smoke test was not performed because Ollama is not installed
 
 ## Adapter tests
 
-The portable contract tests run with `cargo test -p codex-hook-contract`. The Windows backend and hook tests run with `cargo test -p coucou -p coucou-hook`. The separate Windows pipe replay check is `powershell -ExecutionPolicy Bypass -File windows/scripts/test-codex-hook-transport.ps1` after `cargo build --release -p coucou-hook`.
+The portable contract tests run with `cargo test -p codex-hook-contract`. The Windows backend and hook tests run with `cargo test -p coucou -p coucou-hook`. The separate Windows pipe replay check is `powershell -ExecutionPolicy Bypass -File windows/scripts/test-codex-hook-transport.ps1` after `cargo build --release -p coucou-hook`; it reads the committed sanitized projection rather than duplicating the captured event names in the script.
 
 The transport uses a Codex-only named pipe and never enters the inherited Claude frontend hook handler or permission-response path. The receiver currently records only the four event names in the local app log; Stage 5 owns authoritative reduction, persistence, event ordering and snapshots, and Stage 6 owns user-facing monitoring workflows. The adapter by itself does not enable those later capabilities.
 
