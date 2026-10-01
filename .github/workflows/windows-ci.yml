@@ -1,0 +1,177 @@
+name: Windows CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "windows/**"
+      - "docs/**"
+      - "*.md"
+      - ".github/workflows/windows-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "windows/**"
+      - "docs/**"
+      - "*.md"
+      - ".github/workflows/windows-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  scope:
+    runs-on: ubuntu-latest
+    outputs:
+      windows: ${{ steps.filter.outputs.windows }}
+      docs: ${{ steps.filter.outputs.docs }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select affected checks
+        id: filter
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "windows=true" >> "$GITHUB_OUTPUT"
+            echo "docs=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "$BASE_SHA" =~ ^0+$ ]]; then
+            changed_files="$(git ls-files)"
+          elif [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            changed_files="$(git diff --name-only --diff-filter=ACMR "$BASE_SHA...$HEAD_SHA")"
+          else
+            changed_files="$(git diff --name-only --diff-filter=ACMR "$BASE_SHA..$HEAD_SHA")"
+          fi
+
+          windows=false
+          docs=false
+          while IFS= read -r path; do
+            [[ -z "$path" ]] && continue
+            if [[ "$path" == windows/* || "$path" == .github/workflows/windows-ci.yml ]]; then
+              windows=true
+            fi
+            if [[ "$path" == docs/* || "$path" == *.md ]]; then
+              docs=true
+            fi
+          done <<< "$changed_files"
+
+          echo "windows=$windows" >> "$GITHUB_OUTPUT"
+          echo "docs=$docs" >> "$GITHUB_OUTPUT"
+
+  docs:
+    needs: scope
+    if: needs.scope.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check changed documentation
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          PULL_REQUEST: ${{ github.event_name == 'pull_request' }}
+        run: |
+          set -euo pipefail
+          if [[ "$BASE_SHA" =~ ^0+$ ]]; then
+            git diff --check "$HEAD_SHA"
+            pwsh -NoProfile -File docs/check-markdown.ps1
+          else
+            separator=".."
+            if [[ "$PULL_REQUEST" == "true" ]]; then separator="..."; fi
+            range="$BASE_SHA$separator$HEAD_SHA"
+            git diff --check "$range"
+            pwsh -NoProfile -File docs/check-markdown.ps1 \
+              -Base "$BASE_SHA" -Head "$HEAD_SHA" -PullRequest "$PULL_REQUEST"
+          fi
+
+  frontend:
+    needs: scope
+    if: needs.scope.outputs.windows == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+          cache: npm
+          cache-dependency-path: windows/package-lock.json
+
+      - name: Verify pinned Node and npm versions
+        shell: pwsh
+        run: |
+          $nodeVersion = node --version
+          $npmVersion = npm --version
+          Write-Output "Node: $nodeVersion; npm: $npmVersion"
+          if ($nodeVersion -ne 'v22.23.2') { throw "Expected Node v22.23.2, found $nodeVersion" }
+          if ($npmVersion -ne '10.9.8') { throw "Expected npm 10.9.8, found $npmVersion" }
+
+      - name: Install locked frontend dependencies
+        run: npm ci
+
+      - name: Type-check and bundle the frontend
+        shell: pwsh
+        run: |
+          npm exec -- tsc --noEmit
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm exec -- vite build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  rust-tests:
+    needs: scope
+    if: needs.scope.outputs.windows == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@1.98.1
+
+      - name: Verify pinned Rust and Cargo versions
+        shell: pwsh
+        run: |
+          $rustcVersion = rustc --version
+          $cargoVersion = cargo --version
+          Write-Output "$rustcVersion; $cargoVersion"
+          if (-not $rustcVersion.StartsWith('rustc 1.98.1 ')) { throw "Expected rustc 1.98.1, found $rustcVersion" }
+          if (-not $cargoVersion.StartsWith('cargo 1.98.1 ')) { throw "Expected Cargo 1.98.1, found $cargoVersion" }
+
+      - name: Cache Cargo dependencies and build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            windows/target
+          key: windows-cargo-1.98.1-${{ hashFiles('windows/Cargo.lock') }}
+          restore-keys: windows-cargo-1.98.1-
+
+      - name: Build the hook resource required by the Tauri build script
+        run: cargo build --release -p coucou-hook
+
+      - name: Run locked Rust workspace tests
+        run: cargo test --workspace --locked
