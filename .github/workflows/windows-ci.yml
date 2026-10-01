@@ -133,6 +133,9 @@ jobs:
       - name: Test frontend capability gates
         run: npm run test:capabilities
 
+      - name: Validate product/runtime identity
+        run: npm run test:identity
+
       - name: Type-check and bundle the frontend
         shell: pwsh
         run: |
@@ -140,6 +143,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm exec -- vite build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify replaceable asset references and retained sound bytes
+        run: npm run test:resources
 
   rust-tests:
     needs: scope
@@ -174,7 +180,7 @@ jobs:
           restore-keys: windows-cargo-1.98.1-
 
       - name: Build the hook resource required by the Tauri build script
-        run: cargo build --release -p coucou-hook
+        run: cargo build --release -p anti-scrolling-notch-hook
 
       - name: Replay captured Codex hook transport and neutral fallback
         shell: pwsh

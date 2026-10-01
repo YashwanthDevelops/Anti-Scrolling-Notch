@@ -3,9 +3,9 @@
 
 use keyring::Entry;
 
-const SERVICE: &str = "fr.louisraille.coucou";
+const SERVICE: &str = crate::identity::CREDENTIAL_NAMESPACE;
 
-/// Every key Coucou may store. Anything outside this list is refused.
+/// Every key Anti-Scrolling-Notch may store. Anything outside this list is refused.
 pub const KNOWN_KEYS: &[&str] = &[
     "anthropic-api-key",
     "n8n-url",

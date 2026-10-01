@@ -1,11 +1,12 @@
-// Coucou for Windows — app wiring and the commands the island calls.
+// Anti-Scrolling-Notch for Windows — app wiring and the commands the island calls.
 
 mod capabilities;
 mod claude;
-mod codex_pipe;
 mod codex_navigation;
+mod codex_pipe;
 mod files;
 mod hooks;
+mod identity;
 mod integrations;
 mod island;
 mod log;
@@ -22,7 +23,7 @@ use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
-use tauri_plugin_autostart::{ManagerExt, MacosLauncher};
+use tauri_plugin_autostart::ManagerExt;
 
 use claude::{Chat, ChatContext, ChatReply};
 use files::DroppedFile;
@@ -74,13 +75,17 @@ fn save_settings(app: AppHandle, shared: State<Shared>, settings: Settings) {
         (screen_changed, autostart_changed)
     };
     if let Err(err) = settings::save(&settings) {
-        eprintln!("[coucou] could not save settings: {err}");
+        eprintln!("[anti-scrolling-notch] could not save settings: {err}");
     }
     if autostart_changed {
         let manager = app.autolaunch();
-        let result = if settings.autostart { manager.enable() } else { manager.disable() };
+        let result = if settings.autostart {
+            manager.enable()
+        } else {
+            manager.disable()
+        };
         if let Err(err) = result {
-            eprintln!("[coucou] autostart: {err}");
+            eprintln!("[anti-scrolling-notch] autostart: {err}");
         }
     }
     if screen_changed {
@@ -107,12 +112,19 @@ fn set_collapsed(app: AppHandle, shared: State<Shared>, collapsed: bool) {
 /// The front end pushes the island shape; Rust decides click-through from it.
 #[tauri::command]
 fn set_island_rect(shared: State<Shared>, x: f64, y: f64, width: f64, height: f64) {
-    shared.gate.set_rect(island::IslandRect { x, y, w: width, h: height });
+    shared.gate.set_rect(island::IslandRect {
+        x,
+        y,
+        w: width,
+        h: height,
+    });
 }
 
 #[tauri::command]
 fn focus_window(app: AppHandle, focused: bool) {
-    let Some(win) = island::window(&app) else { return };
+    let Some(win) = island::window(&app) else {
+        return;
+    };
     island::set_activating(&win, focused);
     if focused {
         let _ = win.set_focus();
@@ -346,7 +358,7 @@ fn create_settings_window(app: &AppHandle) {
     let url = settings_page_url(app);
     match WebviewWindowBuilder::new(app, "settings", url)
         .additional_browser_args(BROWSER_ARGS)
-        .title("Settings — Coucou")
+        .title("Settings — Anti-Scrolling-Notch")
         .inner_size(560.0, 680.0)
         .min_inner_size(460.0, 480.0)
         .resizable(true)
@@ -391,7 +403,11 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             let _ = app.emit_to(island::WINDOW_LABEL, "tray", "open".to_string());
         }))
-        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
+        .plugin(
+            tauri_plugin_autostart::Builder::new()
+                .app_name(identity::AUTOSTART_VALUE_NAME)
+                .build(),
+        )
         .manage(Shared {
             settings: Mutex::new(loaded.clone()),
             gate: gate.clone(),
@@ -442,7 +458,11 @@ pub fn run() {
             gate.set_active(true);
             island::spawn_cursor_poll(handle.clone(), gate.clone());
 
-            log::line(format!("--- Coucou {} started ---", env!("CARGO_PKG_VERSION")));
+            log::line(format!(
+                "--- {} {} started ---",
+                identity::PRODUCT_NAME,
+                env!("CARGO_PKG_VERSION")
+            ));
             hooks::ensure_hook_exe(&handle);
             pipe::start(handle.clone());
             codex_pipe::start();
@@ -450,5 +470,5 @@ pub fn run() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("error while running Coucou");
+        .expect("error while running Anti-Scrolling-Notch");
 }

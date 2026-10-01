@@ -1,16 +1,17 @@
 [package]
-name = "coucou-hook"
-description = "Relays Claude Code and verified Codex hook events to Coucou over separate named pipes"
+name = "anti-scrolling-notch-hook"
+description = "Relays inherited Claude Code and verified Codex hook events to Anti-Scrolling-Notch over separate named pipes"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "coucou-hook"
+name = "anti-scrolling-notch-hook"
 path = "src/main.rs"
 
 [dependencies]
 codex-hook-contract = { path = "../codex-hook-contract" }
+anti-scrolling-notch-runtime-identity = { path = "../runtime-identity" }
 serde_json = "1"
 
 # Just enough Win32 to know our own SID and to check who is serving the pipe.

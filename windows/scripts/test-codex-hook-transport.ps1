@@ -1,5 +1,5 @@
 param(
-    [string]$HookExe = (Join-Path $PSScriptRoot '..\target\release\coucou-hook.exe')
+    [string]$HookExe = (Join-Path $PSScriptRoot '..\target\release\anti-scrolling-notch-hook.exe')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -9,7 +9,7 @@ if (-not (Test-Path -LiteralPath $HookExe -PathType Leaf)) {
 }
 
 $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-$pipeName = "coucou-codex-$sid"
+$pipeName = "anti-scrolling-notch-codex-$sid"
 $utf8 = [System.Text.UTF8Encoding]::new($false)
 $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
 $projectionPath = Join-Path $repoRoot 'tests\compat\codex-hooks\captured-projections.jsonl'

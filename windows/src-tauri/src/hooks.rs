@@ -3,7 +3,7 @@
 // The rule from CLAUDE.md is strict and is followed to the letter:
 // read %USERPROFILE%\.claude\settings.json, take a dated backup, merge without
 // touching anybody else's hooks, show the diff, and write only after an explicit
-// click. Uninstall removes Coucou's entries and nothing else.
+// click. Uninstall removes Anti-Scrolling-Notch's exact entry and nothing else.
 //
 // The command is only the quoted exe path in forward slashes plus the event name:
 // on Windows Claude Code runs hook commands through Git Bash, and anything with
@@ -34,9 +34,6 @@ pub const HOOK_EVENTS: &[(&str, u64)] = &[
     ("SubagentStart", 10),
     ("SubagentStop", 10),
 ];
-
-/// Marker that identifies a Coucou entry inside settings.json.
-const MARKER: &str = "coucou-hook";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -97,9 +94,9 @@ fn parse_settings(bytes: &[u8], path: &str) -> Result<Value, String> {
     }
     match serde_json::from_slice::<Value>(text) {
         Ok(v) if v.is_object() => Ok(v),
-        Ok(_) => Err(format!("{path} isn't a JSON object — Coucou won't touch it.")),
+        Ok(_) => Err(format!("{path} isn't a JSON object — Anti-Scrolling-Notch won't touch it.")),
         Err(err) => Err(format!(
-            "{path} isn't valid JSON ({err}). Fix or move it, then try again — Coucou won't overwrite it."
+            "{path} isn't valid JSON ({err}). Fix or move it, then try again — Anti-Scrolling-Notch won't overwrite it."
         )),
     }
 }
@@ -111,12 +108,26 @@ fn read_settings_lossy() -> Value {
     read_settings().unwrap_or_else(|_| json!({}))
 }
 
-fn hook_command(event: &str) -> String {
-    let exe = settings::hook_exe_path().to_string_lossy().replace('\\', "/");
+fn hook_command_for(event: &str, relay_exe: &Path) -> String {
+    let exe = relay_exe.to_string_lossy().replace('\\', "/");
     format!("\"{exe}\" {event}")
 }
 
-fn entry_is_ours(entry: &Value) -> bool {
+fn command_executable(command: &str) -> Option<&str> {
+    let command = command.trim_start();
+    if let Some(quoted) = command.strip_prefix('"') {
+        quoted.split_once('"').map(|(exe, _)| exe)
+    } else {
+        command.split_whitespace().next()
+    }
+}
+
+fn normalized_executable(path: &str) -> String {
+    path.replace('\\', "/").to_ascii_lowercase()
+}
+
+fn entry_is_ours(entry: &Value, relay_exe: &Path) -> bool {
+    let expected = normalized_executable(&relay_exe.to_string_lossy());
     entry
         .get("hooks")
         .and_then(Value::as_array)
@@ -124,15 +135,17 @@ fn entry_is_ours(entry: &Value) -> bool {
             hooks.iter().any(|h| {
                 h.get("command")
                     .and_then(Value::as_str)
-                    .map(|c| c.contains(MARKER))
+                    .and_then(command_executable)
+                    .map(normalized_executable)
+                    .map(|executable| executable == expected)
                     .unwrap_or(false)
             })
         })
         .unwrap_or(false)
 }
 
-/// Settings with Coucou's hooks added; everything else is left untouched.
-fn merged(existing: &Value) -> Value {
+/// Settings with this installation's hooks added; legacy and foreign entries survive.
+fn merged_for_relay(existing: &Value, relay_exe: &Path) -> Value {
     let mut root = existing.as_object().cloned().unwrap_or_default();
     let mut hooks = root
         .get("hooks")
@@ -146,11 +159,11 @@ fn merged(existing: &Value) -> Value {
             .and_then(Value::as_array)
             .cloned()
             .unwrap_or_default();
-        list.retain(|entry| !entry_is_ours(entry));
+        list.retain(|entry| !entry_is_ours(entry, relay_exe));
         list.push(json!({
             "hooks": [{
                 "type": "command",
-                "command": hook_command(event),
+                "command": hook_command_for(event, relay_exe),
                 "timeout": timeout,
             }]
         }));
@@ -161,8 +174,12 @@ fn merged(existing: &Value) -> Value {
     Value::Object(root)
 }
 
-/// Settings with every Coucou entry removed, and nothing else changed.
-fn without_ours(existing: &Value) -> Value {
+fn merged(existing: &Value) -> Value {
+    merged_for_relay(existing, &settings::hook_exe_path())
+}
+
+/// Settings with this installation's entries removed, and nothing else changed.
+fn without_relay(existing: &Value, relay_exe: &Path) -> Value {
     let mut root = existing.as_object().cloned().unwrap_or_default();
     let Some(hooks) = root.get("hooks").and_then(Value::as_object).cloned() else {
         return Value::Object(root);
@@ -171,8 +188,11 @@ fn without_ours(existing: &Value) -> Value {
     for (event, value) in hooks {
         match value.as_array() {
             Some(list) => {
-                let kept: Vec<Value> =
-                    list.iter().filter(|e| !entry_is_ours(e)).cloned().collect();
+                let kept: Vec<Value> = list
+                    .iter()
+                    .filter(|e| !entry_is_ours(e, relay_exe))
+                    .cloned()
+                    .collect();
                 if !kept.is_empty() {
                     out.insert(event, Value::Array(kept));
                 }
@@ -188,6 +208,10 @@ fn without_ours(existing: &Value) -> Value {
         root.insert("hooks".into(), Value::Object(out));
     }
     Value::Object(root)
+}
+
+fn without_ours(existing: &Value) -> Value {
+    without_relay(existing, &settings::hook_exe_path())
 }
 
 fn pretty(v: &Value) -> String {
@@ -231,6 +255,7 @@ fn current_fingerprint() -> String {
 
 pub fn status() -> HookStatus {
     let current = read_settings_lossy();
+    let relay_exe = settings::hook_exe_path();
     let installed = current
         .get("hooks")
         .and_then(Value::as_object)
@@ -239,7 +264,7 @@ pub fn status() -> HookStatus {
                 .values()
                 .filter_map(Value::as_array)
                 .flatten()
-                .any(entry_is_ours)
+                .any(|entry| entry_is_ours(entry, &relay_exe))
         })
         .unwrap_or(false);
     let hook_path = settings::hook_exe_path();
@@ -253,7 +278,11 @@ pub fn status() -> HookStatus {
 
 pub fn preview(install: bool) -> Result<HookPreview, String> {
     let current = read_settings()?;
-    let next = if install { merged(&current) } else { without_ours(&current) };
+    let next = if install {
+        merged(&current)
+    } else {
+        without_ours(&current)
+    };
     Ok(HookPreview {
         diff: unified_diff(&pretty(&current), &pretty(&next)),
         backup: backup_path().to_string_lossy().to_string(),
@@ -288,13 +317,17 @@ pub fn write(install: bool, fingerprint: &str) -> Result<String, String> {
         std::fs::copy(&path, &backup).map_err(|e| format!("backup failed: {e}"))?;
     }
 
-    let next = if install { merged(&current) } else { without_ours(&current) };
+    let next = if install {
+        merged(&current)
+    } else {
+        without_ours(&current)
+    };
     let mut text = pretty(&next);
     text.push('\n');
 
     // Write beside the target and rename over it: a crash or a full disk leaves
     // the original settings.json intact rather than half a file.
-    let temp = path.with_extension(format!("json.coucou-{}", std::process::id()));
+    let temp = path.with_extension(format!("json.anti-scrolling-notch-{}", std::process::id()));
     std::fs::write(&temp, text.as_bytes()).map_err(|e| format!("write failed: {e}"))?;
     if let Err(err) = std::fs::rename(&temp, &path) {
         let _ = std::fs::remove_file(&temp);
@@ -303,9 +336,9 @@ pub fn write(install: bool, fingerprint: &str) -> Result<String, String> {
     Ok(backup.to_string_lossy().to_string())
 }
 
-/// Copies coucou-hook.exe into %LOCALAPPDATA%\Coucou\bin on launch.
+/// Copies the app-specific relay into %LOCALAPPDATA%\Anti-Scrolling-Notch\bin on launch.
 /// In a bundled install it comes from the app resources; in `tauri dev` it sits
-/// next to coucou.exe in the workspace target directory.
+/// next to anti-scrolling-notch.exe in the workspace target directory.
 ///
 /// Every candidate is tried rather than just the first, because getting this
 /// wrong is silent and fatal: `resources` used to be a glob, which made NSIS
@@ -320,24 +353,36 @@ pub fn ensure_hook_exe(app: &AppHandle) {
     }
 
     let mut candidates: Vec<PathBuf> = Vec::new();
-    if let Ok(p) = app.path().resolve("coucou-hook.exe", tauri::path::BaseDirectory::Resource) {
+    if let Ok(p) = app.path().resolve(
+        crate::identity::RELAY_EXECUTABLE,
+        tauri::path::BaseDirectory::Resource,
+    ) {
         candidates.push(p);
     }
     if let Ok(exe) = std::env::current_exe() {
         if let Some(parent) = exe.parent() {
             // Installed build, then `tauri dev` (target/debug) next to the
             // release hook the pre-build step produces.
-            candidates.push(parent.join("coucou-hook.exe"));
-            candidates.push(parent.join("../release/coucou-hook.exe"));
+            candidates.push(parent.join(crate::identity::RELAY_EXECUTABLE));
+            candidates.push(
+                parent
+                    .join("../release")
+                    .join(crate::identity::RELAY_EXECUTABLE),
+            );
             // Belt and braces: where the old glob form used to land it.
-            candidates.push(parent.join("_up_/target/release/coucou-hook.exe"));
+            candidates.push(
+                parent
+                    .join("_up_/target/release")
+                    .join(crate::identity::RELAY_EXECUTABLE),
+            );
         }
     }
 
     let tried: Vec<String> = candidates.iter().map(|p| p.display().to_string()).collect();
     let Some(src) = candidates.into_iter().find(|p| p.exists()) else {
         crate::log::line(format!(
-            "coucou-hook.exe not found — Claude Code hooks cannot work. Looked in: {}",
+            "{} not found — inherited Claude Code hooks cannot work. Looked in: {}",
+            crate::identity::RELAY_EXECUTABLE,
             tried.join(", ")
         ));
         return;
@@ -354,7 +399,10 @@ pub fn ensure_hook_exe(app: &AppHandle) {
     // copy is fine, it is the same relay.
     if let Err(err) = std::fs::copy(&src, &dest) {
         if !dest.exists() {
-            crate::log::line(format!("could not install coucou-hook.exe: {err}"));
+            crate::log::line(format!(
+                "could not install {}: {err}",
+                crate::identity::RELAY_EXECUTABLE
+            ));
         }
     }
 }
@@ -466,19 +514,22 @@ mod tests {
     #[test]
     fn empty_and_whitespace_files_start_from_nothing() {
         assert_eq!(parse_settings(b"", WHERE).unwrap(), json!({}));
-        assert_eq!(parse_settings(b"  
-	 ", WHERE).unwrap(), json!({}));
+        assert_eq!(parse_settings(b"  \n\t ", WHERE).unwrap(), json!({}));
     }
 
     #[test]
     fn merging_keeps_every_other_setting_and_every_foreign_hook() {
+        let relay = Path::new(
+            r"C:\Users\Tester\AppData\Local\Anti-Scrolling-Notch\bin\anti-scrolling-notch-hook.exe",
+        );
         let existing = serde_json::json!({
             "model": "claude-opus-5",
             "theme": "dark",
             "enabledPlugins": ["a", "b"],
             "hooks": {
                 "PreToolUse": [
-                    { "hooks": [{ "type": "command", "command": "someone-elses-tool.exe" }] }
+                    { "hooks": [{ "type": "command", "command": "someone-elses-tool.exe" }] },
+                    { "hooks": [{ "type": "command", "command": "\"C:/Users/Tester/AppData/Local/Coucou/bin/coucou-hook.exe\" PreToolUse" }] }
                 ],
                 "SomeEventWeDoNotTouch": [
                     { "hooks": [{ "type": "command", "command": "keep-me.exe" }] }
@@ -486,22 +537,50 @@ mod tests {
             }
         });
 
-        let after = merged(&existing);
+        let after = merged_for_relay(&existing, relay);
         assert_eq!(after["model"], "claude-opus-5");
         assert_eq!(after["theme"], "dark");
         assert_eq!(after["enabledPlugins"], serde_json::json!(["a", "b"]));
 
         let pre = after["hooks"]["PreToolUse"].as_array().unwrap();
         assert!(
-            pre.iter().any(|e| serde_json::to_string(e).unwrap().contains("someone-elses-tool.exe")),
+            pre.iter().any(|e| serde_json::to_string(e)
+                .unwrap()
+                .contains("someone-elses-tool.exe")),
             "another tool's hook was dropped"
         );
-        assert!(pre.iter().any(entry_is_ours), "our own hook was not added");
+        assert!(
+            pre.iter().any(|e| entry_is_ours(e, relay)),
+            "our own hook was not added"
+        );
+        assert!(
+            pre.iter().any(|e| serde_json::to_string(e)
+                .unwrap()
+                .contains("Coucou/bin/coucou-hook.exe")),
+            "legacy Coucou hook was claimed or removed"
+        );
         assert!(after["hooks"]["SomeEventWeDoNotTouch"].is_array());
 
         // And removing ours puts it back exactly as it was.
-        let cleaned = without_ours(&after);
+        let cleaned = without_relay(&after, relay);
         assert_eq!(cleaned, existing);
+    }
+
+    #[test]
+    fn hook_ownership_matches_the_exact_executable_path_only() {
+        let relay = Path::new(
+            r"C:\Users\Tester\AppData\Local\Anti-Scrolling-Notch\bin\anti-scrolling-notch-hook.exe",
+        );
+        let ours = json!({"hooks": [{"command": "\"c:/users/tester/appdata/local/anti-scrolling-notch/bin/anti-scrolling-notch-hook.exe\" SessionStart"}]});
+        let legacy = json!({"hooks": [{"command": "\"C:/Users/Tester/AppData/Local/Coucou/bin/coucou-hook.exe\" SessionStart"}]});
+        let near_match = json!({"hooks": [{"command": "\"C:/Users/Tester/AppData/Local/Anti-Scrolling-Notch/bin/other-anti-scrolling-notch-hook.exe\" SessionStart"}]});
+        let wrapped =
+            json!({"hooks": [{"command": "echo anti-scrolling-notch-hook.exe SessionStart"}]});
+
+        assert!(entry_is_ours(&ours, relay));
+        assert!(!entry_is_ours(&legacy, relay));
+        assert!(!entry_is_ours(&near_match, relay));
+        assert!(!entry_is_ours(&wrapped, relay));
     }
 
     #[test]
@@ -515,13 +594,17 @@ mod tests {
     /// USERPROFILE at a temp directory, and that is process-wide.
     #[test]
     fn writing_backs_up_preserves_and_refuses_a_changed_file() {
-        let tmp = std::env::temp_dir().join(format!("coucou-hooks-{}", std::process::id()));
+        let tmp =
+            std::env::temp_dir().join(format!("anti-scrolling-notch-hooks-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(tmp.join(".claude")).unwrap();
         std::env::set_var("USERPROFILE", &tmp);
 
         let path = settings_path();
-        assert!(path.starts_with(&tmp), "the test must not touch the real home");
+        assert!(
+            path.starts_with(&tmp),
+            "the test must not touch the real home"
+        );
 
         // A real-shaped file, written the way PowerShell 5 would: UTF-8 with BOM.
         let original = r#"{"model":"claude-opus-5","theme":"dark","tui":{"x":1},"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":"other-tool.exe"}]}]}}"#;
@@ -531,7 +614,10 @@ mod tests {
 
         // Install.
         let plan = preview(true).expect("a BOM must not stop the preview");
-        assert!(plan.diff.contains("coucou-hook"), "the diff must show what changes");
+        assert!(
+            plan.diff.contains("anti-scrolling-notch-hook.exe"),
+            "the diff must show what changes"
+        );
         let backup = write(true, &plan.fingerprint).expect("install should succeed");
 
         // The backup holds the original bytes, BOM and all.
@@ -543,7 +629,9 @@ mod tests {
         assert_eq!(after["theme"], "dark");
         assert_eq!(after["tui"]["x"], 1);
         let pre = after["hooks"]["PreToolUse"].as_array().unwrap();
-        assert!(pre.iter().any(|e| serde_json::to_string(e).unwrap().contains("other-tool.exe")));
+        assert!(pre
+            .iter()
+            .any(|e| serde_json::to_string(e).unwrap().contains("other-tool.exe")));
         assert!(status().installed);
 
         // A file that moved since the preview is refused, and left alone.

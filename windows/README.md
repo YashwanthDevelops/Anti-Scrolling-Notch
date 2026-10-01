@@ -1,12 +1,12 @@
 <div align="center">
 
-<img src="src-tauri/icons/128x128.png" width="96" alt="Coucou icon">
+<img src="src-tauri/icons/128x128.png" width="96" alt="Anti-Scrolling-Notch icon">
 
-# Coucou for Windows
+# Anti-Scrolling-Notch for Windows
 
 **Mochi doesn't get a notch on a PC — so it lives at the top of your screen instead.**
 
-Approve Claude Code permissions, watch your session work, drop a file, chat with Claude, keep an eye on your services — without leaving what you're doing.
+This Codex companion prototype retains Coucou's Mochi interface and interaction design during development. The Codex hook contract is verified, while production session monitoring is still being implemented. The inherited Claude Code and service integrations remain clearly labeled in the current prototype.
 
 ![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D4?logo=windows)
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-FFC131?logo=tauri&logoColor=black)
@@ -19,22 +19,9 @@ Approve Claude Code permissions, watch your session work, drop a file, chat with
 
 ---
 
-## Install
+## Release status
 
-1. Download `Coucou-Windows-setup.exe` from the [latest release](../../releases/tag/windows-latest).
-2. Run it. It installs for the current user only — no admin prompt.
-3. Coucou starts, waves hello, and then gets out of the way.
-
-### "Windows protected your PC"
-
-The installer isn't code-signed yet, so **SmartScreen** shows a blue warning the first
-few times anybody downloads it:
-
-> Windows protected your PC — Microsoft Defender SmartScreen prevented an unrecognised app from starting.
-
-Click **More info**, then **Run anyway**. That's it. Signing is on the list; until
-then this is what an unsigned installer looks like on Windows, and you can always
-[build it yourself](#build-it-yourself) if you'd rather not trust a download.
+Windows installer distribution is disabled until the inherited artwork, icons and sounds pass the REL-11 rights review or are replaced. Build the development prototype locally with the instructions below.
 
 ## Using it
 
@@ -65,13 +52,13 @@ your integrations sit in the coloured pills next to Mochi.
 Open **Settings… → Claude Code → Install hooks…**. You get the exact diff of what
 will change in `%USERPROFILE%\.claude\settings.json`, the path of the dated backup
 that will be taken, and nothing is written until you click. Your own hooks are
-never touched, and uninstalling removes only Coucou's entries.
+never touched, and uninstalling removes only this installation's exact relay entries.
 
-The relay is a tiny executable, `coucou-hook.exe`, copied to
-`%LOCALAPPDATA%\Coucou\bin\` at launch. It is given 300 ms to reach Coucou and
+The relay is a tiny executable, `anti-scrolling-notch-hook.exe`, copied to
+`%LOCALAPPDATA%\Anti-Scrolling-Notch\bin\` at launch. It is given 300 ms to reach Anti-Scrolling-Notch and
 exits cleanly if the app is closed, slow or crashed — **a Claude Code session is
-never blocked or slowed down by Coucou.** If nobody answers a permission request
-in time, Coucou stays quiet and Claude Code asks in the terminal as usual.
+never blocked or slowed down by Anti-Scrolling-Notch.** If nobody answers a permission request
+in time, the app stays quiet and Claude Code asks in the terminal as usual.
 
 It works from any terminal — Windows Terminal, PowerShell, VS Code, Git Bash.
 
@@ -81,7 +68,7 @@ It works from any terminal — Windows Terminal, PowerShell, VS Code, Git Bash.
 Credential Manager**, never on disk and never in the interface — the island can
 only ask whether a key exists. Same for every integration key.
 
-No telemetry. The only network requests Coucou makes are to the services you
+No telemetry. The only network requests Anti-Scrolling-Notch makes are to the services you
 configure yourself.
 
 ## Build it yourself
@@ -102,21 +89,21 @@ to work on the island's looks. It also serves `dev/upload-preview.html`, which
 replays the whole file-drop choreography on a loop — the one part of the UI that
 otherwise needs a real drag from Explorer to see. Neither page ships in the app.
 
-`npm run pack` leaves two files in `windows/release/`, the same names the release
-workflow publishes:
+`npm run pack` leaves two locally built files in `windows/release/`. The release
+workflow is blocked until REL-11 asset clearance:
 
 ```
-Coucou-Windows-X.Y.Z-setup.exe    the versioned installer
-Coucou-Windows-setup.exe          the same file under the rolling name
+Anti-Scrolling-Notch-Windows-X.Y.Z-setup.exe    the versioned installer
+Anti-Scrolling-Notch-Windows-setup.exe          the same file under the rolling name
 ```
 
-Installing is optional — `target/release/coucou.exe` runs on its own. There is no
+Installing is optional — `target/release/anti-scrolling-notch.exe` runs on its own. There is no
 window in the taskbar and no console: the island at the top of the screen and the
 Mochi in the notification area are the whole app, and Quit lives in its menu.
 
-The 28 sounds are the macOS app's own files; they are never duplicated in this
-folder. The path is declared once, in `SOUNDS_DIR` at the top of
-`vite.config.ts` — when they move to `shared/sounds/`, change that one line.
+The replaceable `resources.json` manifest names the retained sound source and URL,
+as well as the Mochi renderer and app icon references. The source WAVs are copied
+byte-for-byte into the development build and are not duplicated in this folder.
 
 The app icon and the tray icon are drawn in code, like Mochi itself:
 
@@ -134,13 +121,15 @@ windows/
     views/             every island view
     settings/          the settings window
   src-tauri/           Rust backend: window, named pipe, Claude API, pollers
-  hook/                coucou-hook.exe, the Claude Code relay
+  runtime-identity/    shared product-specific Rust runtime IDs
+  hook/                anti-scrolling-notch-hook.exe, the inherited Claude relay and Codex observer
+  resources.json       replaceable inherited Mochi, icon and sound references
   scripts/             icon generator
 ```
 
 ### Log
 
-`%LOCALAPPDATA%\Coucou\coucou.log` — hook events, permission decisions, poller
+`%LOCALAPPDATA%\Anti-Scrolling-Notch\anti-scrolling-notch.log` — hook events, permission decisions, poller
 problems. It stays on your machine.
 
 ## What's different from the Mac version

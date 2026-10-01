@@ -1,0 +1,16 @@
+{
+  "identityCargoPackage": "anti-scrolling-notch-runtime-identity",
+  "productName": "Anti-Scrolling-Notch",
+  "appIdentifier": "com.yashwanthdevelops.antiscrollingnotch",
+  "appCargoPackage": "anti-scrolling-notch",
+  "appLibrary": "anti_scrolling_notch_lib",
+  "frontendPackage": "anti-scrolling-notch-windows",
+  "relayPackage": "anti-scrolling-notch-hook",
+  "relayExecutable": "anti-scrolling-notch-hook.exe",
+  "storageDirectory": "Anti-Scrolling-Notch",
+  "credentialNamespace": "com.yashwanthdevelops.antiscrollingnotch",
+  "autostartValueName": "Anti-Scrolling-Notch",
+  "appPipePrefix": "anti-scrolling-notch",
+  "codexPipePrefix": "anti-scrolling-notch-codex",
+  "logFileName": "anti-scrolling-notch.log"
+}

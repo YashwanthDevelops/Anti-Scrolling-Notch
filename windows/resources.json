@@ -1,0 +1,14 @@
+{
+  "profile": "coucou-mochi-development",
+  "replaceable": true,
+  "assets": {
+    "mochiRenderer": "src/mochi",
+    "greetingRenderer": "src/mochi/greeting.ts",
+    "inlineIcons": "src/views/icons.ts",
+    "applicationIcons": "src-tauri/icons",
+    "sounds": {
+      "sourceDirectory": "../NotchBuddy/Resources/sounds",
+      "publicDirectory": "/sounds"
+    }
+  }
+}

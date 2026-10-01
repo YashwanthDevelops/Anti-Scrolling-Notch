@@ -22,6 +22,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Require REL-11 asset clearance before building a distributable
+        shell: pwsh
+        env:
+          REL11_WINDOWS_ASSET_CLEARANCE: ${{ vars.REL11_WINDOWS_ASSET_CLEARANCE }}
+        run: |
+          if ($env:REL11_WINDOWS_ASSET_CLEARANCE -cne 'cleared') {
+            throw 'Windows installers remain blocked until REL-11 asset rights or replacements are documented and this repository variable is set to cleared.'
+          }
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -59,7 +68,7 @@ jobs:
           if ($tag -ne $cargo) { $bad += "Cargo.toml says $cargo" }
           if ($bad) { throw "tag says $tag but $($bad -join '; ')" }
 
-      # `npm run build` (run by tauri as beforeBuildCommand) builds coucou-hook
+      # `npm run build` (run by tauri as beforeBuildCommand) builds the relay
       # first, which tauri.conf.json then bundles as a resource. `pack` then
       # copies the installer out of target/ under its shipping name.
       - name: Build and pack the installer
@@ -73,8 +82,8 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Coucou-Windows-setup
-          path: windows/release/Coucou-Windows-${{ steps.pack.outputs.version }}-setup.exe
+          name: Anti-Scrolling-Notch-Windows-setup
+          path: windows/release/Anti-Scrolling-Notch-Windows-${{ steps.pack.outputs.version }}-setup.exe
 
       - name: Publish the release
         if: startsWith(github.ref, 'refs/tags/windows-v')
@@ -84,9 +93,9 @@ jobs:
         run: |
           $v = "${{ steps.pack.outputs.version }}"
           $notes = @"
-          Coucou for Windows $v — Mochi at the top of your screen.
+          Anti-Scrolling-Notch for Windows $v — Mochi at the top of your screen.
 
-          Download ``Coucou-Windows-$v-setup.exe`` and run it. The installer is not
+          Download ``Anti-Scrolling-Notch-Windows-$v-setup.exe`` and run it. The installer is not
           code-signed yet, so Windows SmartScreen shows a warning: click
           **More info → Run anyway**.
           "@
@@ -95,8 +104,8 @@ jobs:
           # button points at /releases/latest. A Windows tag would silently send
           # Mac users to the .exe. The macOS `v*` releases own that slot.
           gh release create "${{ github.ref_name }}" `
-            "release/Coucou-Windows-$v-setup.exe" `
-            --title "Coucou for Windows $v" `
+            "release/Anti-Scrolling-Notch-Windows-$v-setup.exe" `
+            --title "Anti-Scrolling-Notch for Windows $v" `
             --notes $notes `
             --latest=false
 
@@ -114,12 +123,12 @@ jobs:
             # from it gets an old tree.
             git tag -f windows-latest "${{ github.sha }}"
             git push -f origin windows-latest
-            gh release edit windows-latest --title "Coucou for Windows (latest)" --notes "Always the newest Windows build — currently $v."
-            gh release upload windows-latest "release/Coucou-Windows-setup.exe" --clobber
+            gh release edit windows-latest --title "Anti-Scrolling-Notch for Windows (latest)" --notes "Always the newest Windows build — currently $v."
+            gh release upload windows-latest "release/Anti-Scrolling-Notch-Windows-setup.exe" --clobber
           } else {
             gh release create windows-latest `
-              "release/Coucou-Windows-setup.exe" `
-              --title "Coucou for Windows (latest)" `
+              "release/Anti-Scrolling-Notch-Windows-setup.exe" `
+              --title "Anti-Scrolling-Notch for Windows (latest)" `
               --notes "Always the newest Windows build — currently $v." `
               --latest=false
           }
