@@ -2,6 +2,7 @@
 
 import type { BotEmoteName, BotStateName, IslandMode, IslandViewName } from "./layout";
 import type { EyeShape } from "../mochi/engine";
+import type { CapabilityRegistry } from "./capability-guard.js";
 
 export type AgentSource = "claudeCode" | "n8n";
 export type PillBadge = "approval" | "finished" | "error";
@@ -143,6 +144,8 @@ class AppState {
   lastActivity = performance.now();
 
   settings: Settings = { ...DEFAULT_SETTINGS };
+  /** Rust-owned runtime capabilities; absent in a plain-browser preview. */
+  capabilities: CapabilityRegistry | null = null;
 
   private listeners = new Set<Listener>();
 

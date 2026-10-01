@@ -1,5 +1,6 @@
 // Coucou for Windows — app wiring and the commands the island calls.
 
+mod capabilities;
 mod claude;
 mod codex_pipe;
 mod codex_navigation;
@@ -45,6 +46,7 @@ pub struct BootInfo {
     screen: ScreenInfo,
     version: String,
     hook_path: String,
+    capabilities: capabilities::CapabilityRegistry,
 }
 
 #[tauri::command]
@@ -58,6 +60,7 @@ fn boot(app: AppHandle, shared: State<Shared>) -> BootInfo {
         screen,
         version: env!("CARGO_PKG_VERSION").to_string(),
         hook_path: settings::hook_exe_path().to_string_lossy().to_string(),
+        capabilities: capabilities::CapabilityRegistry::discover(),
     }
 }
 
@@ -137,8 +140,14 @@ fn open_url(url: String) {
 /// Best-effort return to the registered Codex desktop app's generic surface.
 /// Exact conversation/session destinations are not verified by the hook adapter.
 #[tauri::command]
-fn open_codex() -> Result<u32, String> {
-    codex_navigation::activate_codex()
+fn open_codex(expected_generation: String) -> Result<u32, String> {
+    let current = capabilities::CapabilityRegistry::discover();
+    capabilities::execute(
+        &current,
+        &expected_generation,
+        capabilities::OPEN_CODEX_CAPABILITY,
+        codex_navigation::activate_codex,
+    )
 }
 
 /// "Open terminal" opens the working folder in VS Code when `code` is on PATH,

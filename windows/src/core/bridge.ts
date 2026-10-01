@@ -5,7 +5,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import type { Settings } from "./state";
+import { capabilityRequestGeneration } from "./capability-guard.js";
+import { State, type Settings } from "./state";
 
 export const IS_TAURI =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -26,6 +27,7 @@ export interface BootInfo {
   screen: { x: number; y: number; width: number; height: number; scale: number };
   version: string;
   hookPath: string;
+  capabilities: import("./capability-guard.js").CapabilityRegistry;
 }
 
 export const Bridge = {
@@ -50,8 +52,14 @@ export const Bridge = {
 
   openUrl: (url: string) => call<void>("open_url", { url }),
 
-  /** Best-effort activation of the Codex app home; there are no verified chat deep links. */
-  openCodex: () => callOrThrow<number>("open_codex"),
+  /** Best-effort activation of Codex's generic app surface, gated by Rust's current capability snapshot. */
+  openCodex: () => {
+    const expectedGeneration = capabilityRequestGeneration(State.capabilities, "codex.openApp");
+    if (!expectedGeneration) {
+      return Promise.reject(new Error("The verified Codex app activation capability is unavailable."));
+    }
+    return callOrThrow<number>("open_codex", { expectedGeneration });
+  },
 
   /** "Open terminal" → opens the folder in VS Code when `code` is on PATH. */
   openInVSCode: (path: string | null) => call<boolean>("open_in_vscode", { path }),
