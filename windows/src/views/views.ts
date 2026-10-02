@@ -200,14 +200,14 @@ function buildOverview(actions: ViewActions): ViewHost {
         if (task.steps.length > 1) {
           who.append(h("span", {
             class: "count",
-            text: `${Math.min(task.stepIndex + 1, task.steps.length)}/${task.steps.length}`,
+            text: `${Math.min(task.stepSequence, task.steps.length)}/${task.steps.length}`,
           }));
         }
         ticker.sync(task);
       } else if (task) {
         const info = State.integrations[task.id];
         const key = [
-          task.id, detailOpen, task.state, task.steps.join("|"),
+          task.id, detailOpen, task.state, task.steps.map((step) => step.text).join("|"),
           info?.loaded, info?.error, info?.configured,
           JSON.stringify(info?.data ?? {}),
         ].join("~");
@@ -337,7 +337,7 @@ function buildQuestion(): ViewHost {
       clear(who);
       who.append(agentWho(State.focusTask, "Claude Code is asking a question"));
       const task = State.focusTask;
-      title.textContent = task?.steps.at(-1) ?? "Claude needs an answer.";
+      title.textContent = task?.steps.at(-1)?.text ?? "Claude needs an answer.";
       clear(row);
       row.append(h("div", { class: "sub", text: "Answer in your terminal — Anti-Scrolling-Notch can't reply for you yet." }));
     },
@@ -362,7 +362,7 @@ function buildError(actions: ViewActions): ViewHost {
       clear(who);
       who.append(agentWho(task, task?.source === "n8n" ? "n8n" : "Claude Code"));
       title.textContent = task?.source === "n8n" ? "Workflow stopped." : "Session stopped on an error.";
-      detail.textContent = task?.steps.at(-1) ?? "No detail available.";
+      detail.textContent = task?.steps.at(-1)?.text ?? "No detail available.";
     },
   };
 }
@@ -382,7 +382,7 @@ function buildFinished(actions: ViewActions): ViewHost {
     sync() {
       clear(who);
       who.append(agentWho(State.focusTask, "Claude Code finished"));
-      title.textContent = State.focusTask?.steps.at(-1) ?? "Session finished";
+      title.textContent = State.focusTask?.steps.at(-1)?.text ?? "Session finished";
     },
   };
 }

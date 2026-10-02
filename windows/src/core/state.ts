@@ -7,13 +7,20 @@ import type { CapabilityRegistry } from "./capability-guard.js";
 export type AgentSource = "claudeCode" | "n8n";
 export type PillBadge = "approval" | "finished" | "error";
 
+export interface TaskStep {
+  /** Monotonic within this task, even after the bounded display history rolls over. */
+  sequence: number;
+  text: string;
+}
+
 export interface AgentTask {
   id: string;
   name: string;
   color: string;
   state: BotStateName;
-  stepIndex: number;
-  steps: string[];
+  stepSequence: number;
+  stepGeneration: number;
+  steps: TaskStep[];
   source: AgentSource;
   isIntegration: boolean;
   emote?: BotEmoteName | null;
@@ -54,7 +61,7 @@ export interface SearchResult {
 const task = (
   id: string, name: string, color: string, source: AgentSource,
 ): AgentTask => ({
-  id, name, color, state: "idle", stepIndex: 0, steps: [], source, isIntegration: true,
+  id, name, color, state: "idle", stepSequence: 0, stepGeneration: 0, steps: [], source, isIntegration: true,
 });
 
 /** AgentTask.integrationAgents — same ids, names and colours as macOS. */
@@ -199,10 +206,26 @@ class AppState {
   appendStep(id: string, step: string) {
     const t = this.tasks.find((x) => x.id === id);
     if (!t) return;
-    t.steps.push(step);
+    t.stepSequence += 1;
+    t.steps.push({ sequence: t.stepSequence, text: step });
     if (t.steps.length > 20) t.steps.shift();
-    t.stepIndex = t.steps.length - 1;
     this.notify();
+  }
+
+  replaceSteps(id: string, steps: string[]) {
+    const t = this.tasks.find((x) => x.id === id);
+    if (!t) return;
+    t.stepGeneration += 1;
+    t.steps = steps.map((text) => ({ sequence: ++t.stepSequence, text }));
+    if (t.steps.length > 20) t.steps = t.steps.slice(-20);
+  }
+
+  clearSteps(id: string) {
+    const t = this.tasks.find((x) => x.id === id);
+    if (t) {
+      t.stepGeneration += 1;
+      t.steps = [];
+    }
   }
 
   setPillBadge(id: string, badge: PillBadge | null) {

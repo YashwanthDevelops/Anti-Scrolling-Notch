@@ -10,7 +10,7 @@
 import { h, svg } from "./dom";
 import { ICONS } from "./icons";
 import { cubicBezier, clamp, lerp } from "../core/anim";
-import type { AgentTask } from "../core/state";
+import type { AgentTask, TaskStep } from "../core/state";
 
 const ROW_H = 22;
 /** One step transition, milliseconds. */
@@ -77,7 +77,9 @@ export class Ticker {
   private c = makeRow(); // incoming
   private queue: string[] = [];
   private startMs: number | null = null;
-  private displayIndex = -1;
+  private displaySequence = -1;
+  private taskId: string | null = null;
+  private taskGeneration = -1;
 
   constructor() {
     this.el = h("div", { class: "ticker" }, this.a.el, this.b.el, this.c.el);
@@ -96,31 +98,61 @@ export class Ticker {
   }
 
   sync(task: AgentTask | null) {
-    const steps = task && task.steps.length > 0 ? task.steps : ["…"];
-    const idx = task ? Math.min(task.stepIndex, steps.length - 1) : -1;
-
-    // First render: drop straight into place, no animation.
-    if (this.displayIndex < 0) {
-      this.displayIndex = idx;
-      setText(this.a, idx > 0 ? steps[idx - 1] : "…");
-      setText(this.b, steps[Math.max(idx, 0)]);
-      this.rest();
-      return;
-    }
-
-    // The session restarted (steps were cleared): re-seed rather than scroll.
-    if (idx < this.displayIndex) {
+    const generation = task?.stepGeneration ?? 0;
+    if (task?.id !== this.taskId || generation !== this.taskGeneration) {
+      this.taskId = task?.id ?? null;
+      this.taskGeneration = generation;
+      this.displaySequence = -1;
       this.queue = [];
       this.startMs = null;
-      this.displayIndex = idx;
-      setText(this.a, idx > 0 ? steps[idx - 1] : "…");
-      setText(this.b, steps[Math.max(idx, 0)]);
+    }
+
+    const steps = task?.steps ?? [];
+
+    // Clearing a task (for example at SessionEnd) cancels stale queued rows but
+    // keeps the task-local sequence high-water mark for the next session.
+    if (steps.length === 0) {
+      this.displaySequence = task?.stepSequence ?? 0;
+      this.queue = [];
+      this.startMs = null;
+      setText(this.a, "…");
+      setText(this.b, "…");
+      setText(this.c, "…");
       this.rest();
       return;
     }
 
-    for (let i = this.displayIndex + 1; i <= idx; i++) this.queue.push(steps[i]);
-    this.displayIndex = idx;
+    const latest = steps[steps.length - 1];
+
+    // First render or task switch: seed the current rows without replaying old
+    // history as if it had just arrived.
+    if (this.displaySequence < 0) {
+      this.displaySequence = latest.sequence;
+      setText(this.a, steps.length > 1 ? steps[steps.length - 2].text : "…");
+      setText(this.b, latest.text);
+      this.rest();
+      return;
+    }
+
+    // A sequence regression is invalid/stale input. Re-seed rather than replay
+    // an older row or let it corrupt the current transition.
+    if (latest.sequence < this.displaySequence) {
+      this.queue = [];
+      this.startMs = null;
+      this.displaySequence = latest.sequence;
+      setText(this.a, steps.length > 1 ? steps[steps.length - 2].text : "…");
+      setText(this.b, latest.text);
+      this.rest();
+      return;
+    }
+
+    if (latest.sequence === this.displaySequence) return;
+
+    // Step IDs remain monotonic when the 20-row history rolls over, so new
+    // steps stay visible even when the array length/index no longer changes.
+    const unseen = steps.filter((step: TaskStep) => step.sequence > this.displaySequence);
+    this.queue.push(...unseen.map((step) => step.text));
+    this.displaySequence = latest.sequence;
     if (this.queue.length > MAX_QUEUE) {
       this.queue = this.queue.slice(-MAX_QUEUE);
     }

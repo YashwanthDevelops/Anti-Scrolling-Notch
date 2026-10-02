@@ -8,7 +8,7 @@
 | Branch / PR | `work/stage-5-core-04-storage` / PR pending |
 | Dependencies | Integrated CORE-01–03 and the exact four-event Codex CLI observer contract; PR #18 merge `237728551ae06207d56f14f4ec20395fb1d4463d` |
 | User outcome | Verified anonymous observer events can be retained locally within explicit count, payload, record and database-size bounds, while preferences survive safe migration and logs redact common secrets and local paths. |
-| Status | Implementation and local checks complete; hosted CI, review and integration pending |
+| Status | Integrated by PR #19 at merge `916f6c4c1dfe599044e0c7667dc1eec8182ed665`; Windows CI #48 and Build #57 passed on the final PR head |
 
 ## In scope
 
@@ -45,7 +45,7 @@ The SQLite driver is `rusqlite` with its `bundled` feature, which compiles its o
 - `npm run build --ignore-scripts`: TypeScript check and Vite production bundle passed. The first sandboxed invocation was denied access to the parent directory by esbuild; the approved elevated rerun passed.
 - `npm run test:resources`: 2/2 passed; inherited visual/icon references and the byte-for-byte sound asset set remain intact.
 - Scoped rustfmt check, `docs/check-markdown.ps1`, and `git diff --check`: passed.
-- Hosted CI, PR review and integration are pending. The current Codex observer still supplies only the exact four verified event names; normalized session/turn history has no producer until later packets.
+- PR #19 passed Windows CI run 48 and Build run 57 on its final head and was merged as `916f6c4c1dfe599044e0c7667dc1eec8182ed665`. A fresh fetch verified `origin/main` at that merge commit and the feature worktree clean. The current Codex observer still supplies only the exact four verified event names; normalized session/turn history has no producer until later packets.
 
 ## Limitations and recovery
 

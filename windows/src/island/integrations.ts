@@ -56,8 +56,7 @@ function handle(island: Island, update: IntegrationUpdate) {
     const task = State.tasks.find((t) => t.id === update.id);
     if (task) {
       task.state = event.success ? "finished" : "error";
-      task.steps = event.detail ? [event.label, event.detail] : [event.label];
-      task.stepIndex = task.steps.length - 1;
+      State.replaceSteps(update.id, event.detail ? [event.label, event.detail] : [event.label]);
       if (State.focusId !== update.id) {
         task.pillBadge = event.success ? "finished" : "error";
       }
@@ -75,8 +74,7 @@ function handle(island: Island, update: IntegrationUpdate) {
           const t = State.tasks.find((x) => x.id === update.id);
           if (!t || (t.state !== "finished" && t.state !== "error")) return;
           t.state = "idle";
-          t.steps = [];
-          t.stepIndex = 0;
+          State.clearSteps(update.id);
           t.pillBadge = null;
           State.notify();
         }, 60_000),
