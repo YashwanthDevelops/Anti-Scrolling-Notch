@@ -5,7 +5,7 @@
 | Packet | Stage 5, packet 1: bounded hardening of the verified Codex CLI observer transport |
 | Base | Integrated `origin/main` at PR #14 merge `2989f668035daffd868a598ae6636358f5317870` |
 | Task | The Codex observer portion of CORE-09 only; CORE-09 remains open until its remaining planned scope is addressed |
-| Status | Local implementation and validation complete; pull request and hosted CI evidence are pending |
+| Status | Local implementation and validation complete; final Windows CI and Build checks pass on PR #15 head `5865df1a010d3013eaa1462ba2f4c575d15bea00`; integration is pending |
 | Product/API contract | Preserve the two-field wire message (`wire_version`, `event`) and the four verified events: `SessionStart`, `UserPromptSubmit`, `Stop`, and `SessionEnd` |
 | Data rule | No prompt, path, session ID, provider credential, or unverified hook event may cross or be logged from this pipe |
 | UI/assets contract | No UI, animation, sound, settings, or inherited resource change |
@@ -35,5 +35,7 @@
 4. A connected silent client is closed by the existing two-second deadline; active receives cannot exceed the fixed semaphore capacity, and listener count/pipe instances remain finite.
 5. `windows/scripts/test-codex-hook-transport.ps1` passes for the four accepted projections and neutral unsupported inputs; absent-app latency remains within its existing bound. Do not claim that this replay is a production app-monitor test.
 6. Rust formatting/tests/checks, relay build, the Windows CI workflow, changed-document checks, resource/identity checks, and diff review pass. Report cross-account limitations explicitly.
+
+The first Windows CI attempt exposed a test-only portability issue: on a runner using the built-in Administrator account, Windows serialized its SID as the SDDL alias `LA`; it also normalized generic rights differently from the local account. The test now canonicalizes an independently constructed expected DACL through Windows using the pipe's concrete generic-read/write mask, then compares that with the live pipe DACL. The focused five-test pipe suite passed locally after the correction. Windows CI run 38 and Build run 47 passed on commit `5865df1a010d3013eaa1462ba2f4c575d15bea00`. A second-account connection remains runtime-unverified; the live DACL and same-user identity tests passed.
 
 Stop at this packet's boundary. Do not check CORE-09 as wholly complete unless the rest of the planned CORE-09 pipe scope has also been implemented and evidenced.
