@@ -4,10 +4,10 @@
 |---|---|
 | Packet | Stage 5, packet 6: supported CORE-05 event-flow foundation |
 | Task ID | CORE-05 (partial; the text-delta requirement remains open) |
-| Branch / PR | `work/stage-5-core-05-event-flow` / PR pending |
+| Branch / PR | [`work/stage-5-core-05-event-flow`](https://github.com/YashwanthDevelops/Anti-Scrolling-Notch/tree/work/stage-5-core-05-event-flow) / [PR #20](https://github.com/YashwanthDevelops/Anti-Scrolling-Notch/pull/20), merged at `2bf681458cc23009940819806dc2b23d7c004d3f` |
 | Dependencies | Integrated CORE-01–04; PR #19 merge `916f6c4c1dfe599044e0c7667dc1eec8182ed665` |
 | User outcome | Replayed normalized source events are ignored when their exact optional ID is still in the bounded window, and the inherited ticker continues to recognize new steps after its visible history reaches its cap. |
-| Status | Implementation and local validation complete; publication, CI, review and integration pending |
+| Status | Integrated; Windows CI #50 and Build #59 passed on the final PR head |
 
 ## In scope
 
