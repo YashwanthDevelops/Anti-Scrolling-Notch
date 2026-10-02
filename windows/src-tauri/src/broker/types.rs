@@ -56,7 +56,7 @@ impl<'de> Deserialize<'de> for SchemaVersion {
 /// An exact, bounded identifier supplied by a source or assigned by the app.
 /// Values are preserved verbatim; callers must not concatenate IDs to form a
 /// composite key. Pair an ID with `SourceKind` using `SourceScopedId` instead.
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(transparent)]
 pub struct OpaqueId(String);
 
@@ -122,7 +122,7 @@ impl std::error::Error for ValidationError {}
 
 /// Broad internal producer category. These labels do not mean that a monitor
 /// for the corresponding source has been implemented or enabled.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SourceKind {
     CodexCliObserver,
@@ -135,7 +135,7 @@ pub enum SourceKind {
 
 /// Source identity is a pair, not a concatenated string, so equal upstream IDs
 /// from separate sources remain distinct.
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct SourceScopedId {
     pub source: SourceKind,
