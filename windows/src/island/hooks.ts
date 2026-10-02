@@ -111,8 +111,7 @@ function upsert(projectName: string, cwd: string) {
 function clearSession() {
   const t = State.tasks.find((x) => x.id === CLAUDE_ID);
   if (!t) return;
-  t.steps = [];
-  t.stepIndex = 0;
+  State.clearSteps(CLAUDE_ID);
   t.name = "VS Code";
   t.pillBadge = null;
 }

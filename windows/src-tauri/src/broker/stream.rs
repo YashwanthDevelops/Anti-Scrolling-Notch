@@ -4,15 +4,15 @@
 //! It does not connect to the UI or interpret upstream Codex events. Producers
 //! supply normalized updates and their observation timestamp.
 
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::num::NonZeroUsize;
 
 use serde::Serialize;
 
 use super::reducer::{ApplyOutcome, BrokerState, BrokerUpdate};
 use super::types::{
-    EventCorrelation, EventEnvelope, EventSequence, Integration, PendingRequest, Repository,
-    SchemaVersion, Session, SourceKind, ToolItem, Turn,
+    EventCorrelation, EventEnvelope, EventSequence, Integration, OpaqueId, PendingRequest,
+    Repository, SchemaVersion, Session, SourceKind, ToolItem, Turn,
 };
 
 pub const DEFAULT_REPLAY_CAPACITY: usize = 256;
@@ -22,6 +22,9 @@ pub struct ApplyReceipt {
     pub outcome: ApplyOutcome,
     /// Zero means that the stream has not accepted a state-changing update.
     pub sequence: u64,
+    /// True only when an existing source event ID or deduplication key matched
+    /// an entry still retained in the bounded deduplication window.
+    pub deduplicated: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -82,6 +85,85 @@ pub struct BrokerStream {
     sequence: u64,
     replay: VecDeque<EventEnvelope<BrokerUpdate>>,
     replay_capacity: NonZeroUsize,
+    seen_source_events: DeduplicationWindow,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+enum IdentifierKind {
+    SourceEvent,
+    Deduplication,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct ScopedEventIdentifier {
+    source: SourceKind,
+    kind: IdentifierKind,
+    value: OpaqueId,
+}
+
+/// Remembers at most one replay window of source events. A record can retain
+/// both identifiers for one event, so the identifier set is bounded at twice
+/// the record capacity. Missing source IDs never fall back to payload hashing.
+#[derive(Clone, Debug)]
+struct DeduplicationWindow {
+    capacity: usize,
+    identifiers: HashSet<ScopedEventIdentifier>,
+    events: VecDeque<Vec<ScopedEventIdentifier>>,
+}
+
+impl DeduplicationWindow {
+    fn new(capacity: NonZeroUsize) -> Self {
+        Self {
+            capacity: capacity.get(),
+            identifiers: HashSet::with_capacity(capacity.get().saturating_mul(2)),
+            events: VecDeque::with_capacity(capacity.get()),
+        }
+    }
+
+    fn duplicate_or_remember(
+        &mut self,
+        source: SourceKind,
+        source_event_id: Option<&OpaqueId>,
+        deduplication_key: Option<&OpaqueId>,
+    ) -> bool {
+        let mut identifiers = Vec::with_capacity(2);
+        if let Some(value) = source_event_id {
+            identifiers.push(ScopedEventIdentifier {
+                source,
+                kind: IdentifierKind::SourceEvent,
+                value: value.clone(),
+            });
+        }
+        if let Some(value) = deduplication_key {
+            identifiers.push(ScopedEventIdentifier {
+                source,
+                kind: IdentifierKind::Deduplication,
+                value: value.clone(),
+            });
+        }
+        if identifiers.is_empty() {
+            return false;
+        }
+        if identifiers
+            .iter()
+            .any(|identifier| self.identifiers.contains(identifier))
+        {
+            return true;
+        }
+
+        for identifier in &identifiers {
+            self.identifiers.insert(identifier.clone());
+        }
+        self.events.push_back(identifiers);
+        while self.events.len() > self.capacity {
+            if let Some(expired) = self.events.pop_front() {
+                for identifier in expired {
+                    self.identifiers.remove(&identifier);
+                }
+            }
+        }
+        false
+    }
 }
 
 impl Default for BrokerStream {
@@ -104,6 +186,7 @@ impl BrokerStream {
             sequence: 0,
             replay: VecDeque::with_capacity(replay_capacity.get()),
             replay_capacity,
+            seen_source_events: DeduplicationWindow::new(replay_capacity),
         }
     }
 
@@ -120,6 +203,19 @@ impl BrokerStream {
         update: BrokerUpdate,
         observed_at_unix_ms: u64,
     ) -> Result<ApplyReceipt, StreamError> {
+        self.apply_with_source_ids(update, observed_at_unix_ms, None, None)
+    }
+
+    /// Apply a normalized update with identifiers already supplied by its
+    /// adapter. The broker scopes each identifier by source and identifier
+    /// kind. It does not infer IDs from payload content or anonymous hook names.
+    pub fn apply_with_source_ids(
+        &mut self,
+        update: BrokerUpdate,
+        observed_at_unix_ms: u64,
+        source_event_id: Option<OpaqueId>,
+        deduplication_key: Option<OpaqueId>,
+    ) -> Result<ApplyReceipt, StreamError> {
         // Fail before mutation rather than wrapping or changing state without
         // a sequence if the monotonic cursor has reached its maximum value.
         if self.sequence == u64::MAX {
@@ -127,11 +223,24 @@ impl BrokerStream {
         }
 
         let source = update.source();
+        if self.seen_source_events.duplicate_or_remember(
+            source,
+            source_event_id.as_ref(),
+            deduplication_key.as_ref(),
+        ) {
+            return Ok(ApplyReceipt {
+                outcome: ApplyOutcome::Unchanged,
+                sequence: self.sequence,
+                deduplicated: true,
+            });
+        }
+
         let outcome = self.state.apply(update.clone());
         if outcome == ApplyOutcome::Unchanged {
             return Ok(ApplyReceipt {
                 outcome,
                 sequence: self.sequence,
+                deduplicated: false,
             });
         }
 
@@ -141,10 +250,10 @@ impl BrokerStream {
             sequence: EventSequence::new(sequence)
                 .expect("a sequenced broker event always has a non-zero sequence"),
             source,
-            source_event_id: None,
+            source_event_id,
             observed_at_unix_ms,
             correlation: EventCorrelation::default(),
-            deduplication_key: None,
+            deduplication_key,
             payload: update,
         };
         self.sequence = sequence;
@@ -153,7 +262,11 @@ impl BrokerStream {
             self.replay.pop_front();
         }
 
-        Ok(ApplyReceipt { outcome, sequence })
+        Ok(ApplyReceipt {
+            outcome,
+            sequence,
+            deduplicated: false,
+        })
     }
 
     pub fn snapshot(&self) -> BrokerSnapshot {
@@ -252,12 +365,13 @@ mod tests {
     }
 
     fn session(identity: &str) -> Session {
+        session_from_source(SourceKind::CodexCliObserver, identity)
+    }
+
+    fn session_from_source(source: SourceKind, identity: &str) -> Session {
         Session {
             schema_version: SchemaVersion::current(),
-            identity: super::super::types::SourceScopedId::new(
-                SourceKind::CodexCliObserver,
-                id(identity),
-            ),
+            identity: super::super::types::SourceScopedId::new(source, id(identity)),
             thread_id: None,
             agent_id: None,
             parent_agent_id: None,
@@ -446,5 +560,173 @@ mod tests {
     fn requested_replay_capacity_cannot_exceed_the_global_bound() {
         let stream = BrokerStream::with_replay_capacity(NonZeroUsize::new(usize::MAX).unwrap());
         assert!(stream.replay.capacity() <= DEFAULT_REPLAY_CAPACITY);
+    }
+
+    #[test]
+    fn repeated_source_event_ids_are_ignored_before_the_reducer_runs() {
+        let mut stream = BrokerStream::default();
+        let accepted = stream
+            .apply_with_source_ids(
+                BrokerUpdate::UpsertSession(session("first")),
+                10,
+                Some(id("event-1")),
+                None,
+            )
+            .unwrap();
+        let duplicate = stream
+            .apply_with_source_ids(
+                BrokerUpdate::UpsertSession(session("second")),
+                11,
+                Some(id("event-1")),
+                None,
+            )
+            .unwrap();
+
+        assert!(!accepted.deduplicated);
+        assert_eq!(duplicate.outcome, ApplyOutcome::Unchanged);
+        assert!(duplicate.deduplicated);
+        assert_eq!(duplicate.sequence, 1);
+        assert!(stream.state().session(&session("first").identity).is_some());
+        assert!(stream
+            .state()
+            .session(&session("second").identity)
+            .is_none());
+        assert_eq!(stream.replay.len(), 1);
+    }
+
+    #[test]
+    fn identical_source_ids_from_different_sources_remain_distinct() {
+        let mut stream = BrokerStream::default();
+        let codex = stream
+            .apply_with_source_ids(
+                BrokerUpdate::UpsertSession(session_from_source(
+                    SourceKind::CodexCliObserver,
+                    "codex-session",
+                )),
+                10,
+                Some(id("same-id")),
+                None,
+            )
+            .unwrap();
+        let github = stream
+            .apply_with_source_ids(
+                BrokerUpdate::UpsertSession(session_from_source(SourceKind::GitHub, "pr-1")),
+                11,
+                Some(id("same-id")),
+                None,
+            )
+            .unwrap();
+
+        assert!(!codex.deduplicated);
+        assert!(!github.deduplicated);
+        assert_eq!(stream.sequence(), 2);
+        assert_eq!(stream.state().sessions().count(), 2);
+    }
+
+    #[test]
+    fn deduplication_keys_are_source_scoped_and_kind_scoped() {
+        let mut stream = BrokerStream::default();
+        stream
+            .apply_with_source_ids(
+                BrokerUpdate::UpsertSession(session("first")),
+                10,
+                None,
+                Some(id("same-text")),
+            )
+            .unwrap();
+        let duplicate = stream
+            .apply_with_source_ids(
+                BrokerUpdate::UpsertSession(session("duplicate")),
+                11,
+                None,
+                Some(id("same-text")),
+            )
+            .unwrap();
+        let distinct_kind = stream
+            .apply_with_source_ids(
+                BrokerUpdate::UpsertSession(session("different-kind")),
+                12,
+                Some(id("same-text")),
+                None,
+            )
+            .unwrap();
+        let distinct_source = stream
+            .apply_with_source_ids(
+                BrokerUpdate::UpsertSession(session_from_source(SourceKind::GitHub, "github")),
+                13,
+                None,
+                Some(id("same-text")),
+            )
+            .unwrap();
+
+        assert!(duplicate.deduplicated);
+        assert!(!distinct_kind.deduplicated);
+        assert!(!distinct_source.deduplicated);
+        assert_eq!(stream.sequence(), 3);
+        assert_eq!(stream.state().sessions().count(), 3);
+    }
+
+    #[test]
+    fn missing_source_ids_do_not_trigger_payload_based_deduplication() {
+        let mut stream = BrokerStream::default();
+        let first = stream
+            .apply(BrokerUpdate::UpsertSession(session("first")), 10)
+            .unwrap();
+        let second = stream
+            .apply(BrokerUpdate::UpsertSession(session("second")), 11)
+            .unwrap();
+
+        assert!(!first.deduplicated);
+        assert!(!second.deduplicated);
+        assert_eq!(stream.sequence(), 2);
+        assert_eq!(stream.state().sessions().count(), 2);
+    }
+
+    #[test]
+    fn source_identity_window_is_bounded_and_evicts_oldest_events() {
+        let mut stream = small_stream(2);
+        for index in 1..=3 {
+            stream
+                .apply_with_source_ids(
+                    BrokerUpdate::UpsertSession(session(&format!("session-{index}"))),
+                    index,
+                    Some(id(&format!("event-{index}"))),
+                    None,
+                )
+                .unwrap();
+        }
+        let after_eviction = stream
+            .apply_with_source_ids(
+                BrokerUpdate::UpsertSession(session("session-after-eviction")),
+                4,
+                Some(id("event-1")),
+                None,
+            )
+            .unwrap();
+
+        assert!(!after_eviction.deduplicated);
+        assert_eq!(after_eviction.sequence, 4);
+        assert_eq!(stream.seen_source_events.events.len(), 2);
+        assert_eq!(stream.seen_source_events.identifiers.len(), 2);
+        assert!(stream
+            .state()
+            .session(&session("session-after-eviction").identity)
+            .is_some());
+    }
+
+    #[test]
+    fn accepted_source_identifiers_are_preserved_in_replay_envelopes() {
+        let mut stream = BrokerStream::default();
+        stream
+            .apply_with_source_ids(
+                BrokerUpdate::UpsertSession(session("session-1")),
+                10,
+                Some(id("source-event-1")),
+                Some(id("dedupe-1")),
+            )
+            .unwrap();
+
+        assert_eq!(stream.replay[0].source_event_id, Some(id("source-event-1")));
+        assert_eq!(stream.replay[0].deduplication_key, Some(id("dedupe-1")));
     }
 }

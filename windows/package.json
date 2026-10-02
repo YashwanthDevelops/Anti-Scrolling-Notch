@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "test:capabilities": "node --test tests/capability-guard.test.mjs",
-    "test:shell": "node --experimental-strip-types --test tests/island-fsm.test.mjs tests/motion.test.mjs",
+    "test:shell": "node --experimental-strip-types --test --test-concurrency=1 tests/island-fsm.test.mjs tests/motion.test.mjs tests/sequence.test.mjs",
     "preview": "vite preview",
     "icons": "node scripts/gen-icons.mjs",
     "tauri": "tauri",

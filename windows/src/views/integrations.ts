@@ -337,7 +337,7 @@ function n8nCard(task: AgentTask, onDetail: () => void, openSettings: () => void
           onclick: onDetail,
         },
         dot(accent, 5),
-        h("span", { class: "int-name", text: task.steps[0] ?? "Workflow" }),
+        h("span", { class: "int-name", text: task.steps[0]?.text ?? "Workflow" }),
         svg(ICONS.ellipsis, 8),
       ),
     ),
@@ -347,7 +347,7 @@ function n8nCard(task: AgentTask, onDetail: () => void, openSettings: () => void
 function n8nDetail(task: AgentTask, onBack: () => void): HTMLElement {
   const success = task.state === "finished";
   const accent = success ? "#22C55E" : "#F4505E";
-  const detail = task.steps[1];
+  const detail = task.steps[1]?.text;
   return h(
     "div",
     { class: "int-card detail" },
@@ -356,7 +356,7 @@ function n8nDetail(task: AgentTask, onBack: () => void): HTMLElement {
       { class: "int-detail-head" },
       h("button", { class: "int-back", onclick: onBack }, svg(ICONS.chevronLeft, 10, { stroke: 2.4 })),
       dot(accent, 6),
-      h("b", { text: task.steps[0] ?? "Workflow" }),
+      h("b", { text: task.steps[0]?.text ?? "Workflow" }),
       h("span", {
         class: "int-badge",
         style: `color:${accent};background:${accent}24`,
