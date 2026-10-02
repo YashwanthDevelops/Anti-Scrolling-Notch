@@ -8,10 +8,11 @@ edition = "2021"
 license = "MIT"
 
 # Release profile shared by the app and the hook relay: the hook must start fast
-# (Claude Code spawns it on every event), so we optimise for size and speed.
+# (Claude Code spawns it on every event), so we optimise for size and speed with
+# thin LTO, which also keeps the Windows app build reliable on the pinned toolchain.
 [profile.release]
 opt-level = "s"
-lto = true
+lto = "thin"
 codegen-units = 1
 panic = "abort"
 strip = true
