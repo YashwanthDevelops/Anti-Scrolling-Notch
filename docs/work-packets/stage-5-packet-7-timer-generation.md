@@ -4,10 +4,10 @@
 |---|---|
 | Packet | Stage 5, packet 7: CORE-06 timer scoping |
 | Task ID | CORE-06 only |
-| Branch / PR | `work/stage-5-core-06-timer-generation` / PR pending |
+| Branch / PR | [`work/stage-5-core-06-timer-generation`](https://github.com/YashwanthDevelops/Anti-Scrolling-Notch/tree/work/stage-5-core-06-timer-generation) / [PR #21](https://github.com/YashwanthDevelops/Anti-Scrolling-Notch/pull/21), merged at `149ec9eed67c3f6a955ad5783bc9ef8bb3995dc7` |
 | Dependencies | Stage 5 CORE-01–04 and packet 6 integrated; PR #20 merge `2bf681458cc23009940819806dc2b23d7c004d3f` |
 | User outcome | A delayed completion/badge cleanup may update a task only if that same task is still in the activity generation and status for which the timer was scheduled. |
-| Status | Implementation and required local validation passed; publication pending |
+| Status | Integrated; Windows CI #52 and Build #61 passed on the final PR head |
 
 ## In scope
 
