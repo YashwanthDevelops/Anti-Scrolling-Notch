@@ -224,7 +224,8 @@ mod tests {
     use windows::core::PWSTR;
     use windows::Win32::Foundation::HANDLE;
     use windows::Win32::Security::Authorization::{
-        ConvertSecurityDescriptorToStringSecurityDescriptorW, GetSecurityInfo, SDDL_REVISION_1,
+        ConvertSecurityDescriptorToStringSecurityDescriptorW,
+        ConvertStringSecurityDescriptorToSecurityDescriptorW, GetSecurityInfo, SDDL_REVISION_1,
         SE_KERNEL_OBJECT,
     };
     use windows::Win32::Security::{DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR};
@@ -239,6 +240,26 @@ mod tests {
             std::process::id(),
             NEXT_PIPE.fetch_add(1, Ordering::Relaxed)
         )
+    }
+
+    fn descriptor_dacl_sddl(descriptor: PSECURITY_DESCRIPTOR) -> io::Result<String> {
+        let _descriptor = LocalAllocation(descriptor.0);
+        let mut text = PWSTR::null();
+        unsafe {
+            ConvertSecurityDescriptorToStringSecurityDescriptorW(
+                descriptor,
+                SDDL_REVISION_1,
+                DACL_SECURITY_INFORMATION,
+                &mut text,
+                None,
+            )
+            .map_err(win_error)?;
+        }
+        let _text = LocalAllocation(text.0.cast());
+        unsafe {
+            text.to_string()
+                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
+        }
     }
 
     fn actual_dacl_sddl(pipe: &NamedPipeServer) -> io::Result<String> {
@@ -258,23 +279,26 @@ mod tests {
         if status.0 != 0 {
             return Err(io::Error::from_raw_os_error(status.0 as i32));
         }
-        let _descriptor = LocalAllocation(descriptor.0);
-        let mut text = PWSTR::null();
+        descriptor_dacl_sddl(descriptor)
+    }
+
+    fn expected_dacl_sddl(sid: &str) -> io::Result<String> {
+        // The pipe's generic read/write rights map to this concrete mask.
+        // Use the mask spelling because Windows may serialize GRGW as either
+        // symbolic rights or a numeric mask depending on the descriptor path.
+        let sddl = format!("D:P(A;;0x12019f;;;{sid})");
+        let wide_sddl = sddl.encode_utf16().chain(Some(0)).collect::<Vec<_>>();
+        let mut descriptor = PSECURITY_DESCRIPTOR::default();
         unsafe {
-            ConvertSecurityDescriptorToStringSecurityDescriptorW(
-                descriptor,
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                PCWSTR(wide_sddl.as_ptr()),
                 SDDL_REVISION_1,
-                DACL_SECURITY_INFORMATION,
-                &mut text,
+                &mut descriptor,
                 None,
             )
             .map_err(win_error)?;
         }
-        let _text = LocalAllocation(text.0.cast());
-        unsafe {
-            text.to_string()
-                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
-        }
+        descriptor_dacl_sddl(descriptor)
     }
 
     async fn open_client(
@@ -315,11 +339,13 @@ mod tests {
             let name = test_pipe_name(&sid);
             let mut listeners = create_listener_pool(&name, &sid).unwrap();
             assert_eq!(listeners.len(), MAX_LISTENERS);
+            // Windows may serialize a well-known SID using its SDDL alias
+            // (for example, the built-in Administrator account as `LA`).
+            // Canonicalize the expected DACL through the same OS serializer so
+            // the test compares the actual trustee, not its textual spelling.
+            let expected_dacl = expected_dacl_sddl(&sid).unwrap();
             for listener in &listeners {
-                assert_eq!(
-                    actual_dacl_sddl(listener).unwrap(),
-                    format!("D:P(A;;0x12019f;;;{sid})")
-                );
+                assert_eq!(actual_dacl_sddl(listener).unwrap(), expected_dacl);
             }
             assert!(create_server(&name, &sid, true).is_err());
 
