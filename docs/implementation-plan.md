@@ -36,6 +36,8 @@ Stage 4 is integrated through SHELL-07 by PR #14, but Stage 4 is not complete. S
 
 Stage 5 packet 1 is limited to the verified Codex CLI observer portion of CORE-09: secure and bound the existing named-pipe transport while preserving its exact two-field wire contract and four verified events. The legacy Claude hook/decision pipe, CORE-01–08 and CORE-10–11 reducer/store/request work, and all Stage 6+ production monitoring remain outside this packet. CORE-09 stays unchecked until its remaining planned pipe scope is addressed; packet-level completion is recorded separately in the execution ledger.
 
+Stage 5 packet 1 is integrated by PR #15 at `40d2fce80c5cae04138f50038ed1c4057cd99cfe`. Stage 5 packet 2 implements CORE-01 only: versioned backend domain records and serialization/validation tests. The current Codex observer remains anonymous and limited to its four captured event names; CORE-01 does not infer session identities or introduce source-event schemas. Reducer mutation, sequence allocation/replay, SQLite/history, request routing, frontend store/UI, and production monitoring stay in their owning later CORE tasks.
+
 ## Release scopes and inherited-feature decisions
 
 | Release profile | Required user outcome | Required stages |
@@ -303,7 +305,7 @@ Architecture invariants:
 
 Tasks:
 
-- [ ] **CORE-01** Define versioned Session, Turn, ToolItem, PendingRequest, Repository, Integration and EventEnvelope types.
+- [x] **CORE-01** Define versioned Session, Turn, ToolItem, PendingRequest, Repository, Integration and EventEnvelope types.
 - [ ] **CORE-02** Build a Rust reducer keyed by source/session/thread/turn/tool/agent IDs. Keep lifecycle, activity, waiting state and connection health separate.
 - [ ] **CORE-03** Add snapshot plus monotonic event sequence/replay. UI reload or sequence gaps trigger resynchronization.
 - [ ] **CORE-04** Add bounded SQLite history, atomic/migrated preferences and redacted rotating logs. Sensitive content retention is configurable and off by default.

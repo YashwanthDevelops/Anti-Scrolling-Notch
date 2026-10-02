@@ -1,5 +1,6 @@
 // Anti-Scrolling-Notch for Windows — app wiring and the commands the island calls.
 
+pub mod broker;
 mod capabilities;
 mod claude;
 mod codex_navigation;
