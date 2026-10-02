@@ -3,7 +3,8 @@
 //! This pipe is intentionally separate from `pipe.rs`: Codex lifecycle events
 //! must not enter Claude's frontend hook handlers or its permission decision
 //! flow. Only the event discriminator crosses this bounded, current-user-only
-//! boundary. Stage 5's reducer will consume it in a later packet.
+//! boundary. The verified event is retained locally but remains anonymous and
+//! is not converted into reducer/session state.
 
 use std::ffi::c_void;
 use std::io;
@@ -12,6 +13,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use codex_hook_contract::{parse_wire_message, CodexHookObservation, MAX_WIRE_BYTES};
+use tauri::{AppHandle, Manager};
 use tokio::io::AsyncReadExt;
 use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
@@ -34,7 +36,7 @@ fn pipe_name_for_sid(sid: &str) -> String {
     format!(r"\\.\pipe\{}-{sid}", crate::identity::CODEX_PIPE_PREFIX)
 }
 
-pub fn start() {
+pub fn start(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let Some(sid) = crate::win_user::current_user_sid() else {
             log::line("Codex observer disabled: could not resolve current-user SID");
@@ -56,8 +58,9 @@ pub fn start() {
             let name = name.clone();
             let sid = sid.clone();
             let permits = Arc::clone(&permits);
+            let app = app.clone();
             tauri::async_runtime::spawn(async move {
-                accept_loop(server, name, sid, permits).await;
+                accept_loop(server, name, sid, permits, app).await;
             });
         }
     });
@@ -112,6 +115,7 @@ async fn accept_loop(
     name: String,
     sid: String,
     permits: Arc<Semaphore>,
+    app: AppHandle,
 ) {
     loop {
         if let Err(err) = server.connect().await {
@@ -142,13 +146,45 @@ async fn accept_loop(
         };
 
         let connected = std::mem::replace(&mut server, next);
+        let app = app.clone();
         tauri::async_runtime::spawn(async move {
             if let Some(observation) = receive(connected).await {
                 log::line(format!("Codex CLI hook {}", observation.event.as_str()));
+                if let Some(observed_at) = unix_time_ms() {
+                    let app = app.clone();
+                    let result = tauri::async_runtime::spawn_blocking(move || {
+                        let shared = app.state::<crate::Shared>();
+                        let mut history = shared
+                            .history
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        if let Some(history) = history.as_mut() {
+                            history.record_hook_observation(observation, observed_at)?;
+                        }
+                        Ok::<(), crate::storage::HistoryError>(())
+                    })
+                    .await;
+                    match result {
+                        Ok(Ok(())) => {}
+                        Ok(Err(error)) => {
+                            log::line(format!("Codex hook history append failed: {error}"));
+                        }
+                        Err(error) => {
+                            log::line(format!("Codex hook history worker failed: {error}"));
+                        }
+                    }
+                }
             }
             drop(permit);
         });
     }
+}
+
+fn unix_time_ms() -> Option<u64> {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .and_then(|duration| u64::try_from(duration.as_millis()).ok())
 }
 
 fn acquire_client_permit(permits: &Arc<Semaphore>) -> Option<OwnedSemaphorePermit> {
