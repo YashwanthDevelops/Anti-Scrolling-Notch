@@ -8,6 +8,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde::Serialize;
+
 use super::types::{
     ConnectionHealth, Integration, OpaqueId, PendingRequest, Repository, SchemaVersion, Session,
     SessionActivity, SessionLifecycle, SourceKind, SourceScopedId, ToolItem, Turn, WaitingState,
@@ -23,7 +25,8 @@ pub enum ApplyOutcome {
 
 /// Independent session-state axes. `None` means leave that axis untouched;
 /// `Some(Unknown)` explicitly resets it to unknown.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SessionStatePatch {
     pub identity: SourceScopedId,
     pub lifecycle: Option<SessionLifecycle>,
@@ -58,7 +61,8 @@ impl SessionStatePatch {
 
 /// Internal normalized state mutations. These variants do not describe
 /// upstream Codex events and are not exposed over Tauri IPC.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum BrokerUpdate {
     UpsertSession(Session),
     PatchSessionState(SessionStatePatch),

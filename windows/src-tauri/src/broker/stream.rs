@@ -1,0 +1,450 @@
+//! Sequenced snapshots and bounded in-memory replay for the backend broker.
+//!
+//! This module is the synchronization contract for a future Tauri view store.
+//! It does not connect to the UI or interpret upstream Codex events. Producers
+//! supply normalized updates and their observation timestamp.
+
+use std::collections::VecDeque;
+use std::num::NonZeroUsize;
+
+use serde::Serialize;
+
+use super::reducer::{ApplyOutcome, BrokerState, BrokerUpdate};
+use super::types::{
+    EventCorrelation, EventEnvelope, EventSequence, Integration, PendingRequest, Repository,
+    SchemaVersion, Session, SourceKind, ToolItem, Turn,
+};
+
+pub const DEFAULT_REPLAY_CAPACITY: usize = 256;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ApplyReceipt {
+    pub outcome: ApplyOutcome,
+    /// Zero means that the stream has not accepted a state-changing update.
+    pub sequence: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StreamError {
+    SequenceExhausted,
+}
+
+impl std::fmt::Display for StreamError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::SequenceExhausted => formatter.write_str("broker event sequence is exhausted"),
+        }
+    }
+}
+
+impl std::error::Error for StreamError {}
+
+/// Complete backend state at one sequence cursor. The cursor is zero only for
+/// the initial empty state; emitted event sequences are always non-zero.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrokerSnapshot {
+    pub schema_version: SchemaVersion,
+    pub sequence: u64,
+    pub sessions: Vec<Session>,
+    pub turns: Vec<Turn>,
+    pub tool_items: Vec<ToolItem>,
+    pub pending_requests: Vec<PendingRequest>,
+    pub repositories: Vec<Repository>,
+    pub integrations: Vec<Integration>,
+}
+
+/// A consumer sends its last applied sequence. A fresh UI (cursor zero), a
+/// future cursor, or a cursor older than retained replay receives a snapshot.
+/// Otherwise the response is a contiguous replay through the current head.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+pub enum BrokerSyncResponse {
+    Snapshot {
+        snapshot: BrokerSnapshot,
+    },
+    Replay {
+        after_sequence: u64,
+        through_sequence: u64,
+        events: Vec<EventEnvelope<BrokerUpdate>>,
+    },
+}
+
+/// Serializes state-changing normalized updates, retains a bounded recent
+/// replay, and can repair a consumer cursor with a full state snapshot.
+#[derive(Clone, Debug)]
+pub struct BrokerStream {
+    state: BrokerState,
+    sequence: u64,
+    replay: VecDeque<EventEnvelope<BrokerUpdate>>,
+    replay_capacity: NonZeroUsize,
+}
+
+impl Default for BrokerStream {
+    fn default() -> Self {
+        Self::with_replay_capacity(
+            NonZeroUsize::new(DEFAULT_REPLAY_CAPACITY)
+                .expect("default replay capacity is non-zero"),
+        )
+    }
+}
+
+impl BrokerStream {
+    /// Use a smaller replay window for constrained callers/tests; callers
+    /// cannot increase the fixed 256-event memory bound.
+    pub fn with_replay_capacity(replay_capacity: NonZeroUsize) -> Self {
+        let replay_capacity = NonZeroUsize::new(replay_capacity.get().min(DEFAULT_REPLAY_CAPACITY))
+            .expect("default replay capacity is non-zero");
+        Self {
+            state: BrokerState::default(),
+            sequence: 0,
+            replay: VecDeque::with_capacity(replay_capacity.get()),
+            replay_capacity,
+        }
+    }
+
+    pub fn sequence(&self) -> u64 {
+        self.sequence
+    }
+
+    pub fn state(&self) -> &BrokerState {
+        &self.state
+    }
+
+    pub fn apply(
+        &mut self,
+        update: BrokerUpdate,
+        observed_at_unix_ms: u64,
+    ) -> Result<ApplyReceipt, StreamError> {
+        // Fail before mutation rather than wrapping or changing state without
+        // a sequence if the monotonic cursor has reached its maximum value.
+        if self.sequence == u64::MAX {
+            return Err(StreamError::SequenceExhausted);
+        }
+
+        let source = update.source();
+        let outcome = self.state.apply(update.clone());
+        if outcome == ApplyOutcome::Unchanged {
+            return Ok(ApplyReceipt {
+                outcome,
+                sequence: self.sequence,
+            });
+        }
+
+        let sequence = self.sequence + 1;
+        let event = EventEnvelope {
+            schema_version: SchemaVersion::current(),
+            sequence: EventSequence::new(sequence)
+                .expect("a sequenced broker event always has a non-zero sequence"),
+            source,
+            source_event_id: None,
+            observed_at_unix_ms,
+            correlation: EventCorrelation::default(),
+            deduplication_key: None,
+            payload: update,
+        };
+        self.sequence = sequence;
+        self.replay.push_back(event);
+        if self.replay.len() > self.replay_capacity.get() {
+            self.replay.pop_front();
+        }
+
+        Ok(ApplyReceipt { outcome, sequence })
+    }
+
+    pub fn snapshot(&self) -> BrokerSnapshot {
+        BrokerSnapshot {
+            schema_version: SchemaVersion::current(),
+            sequence: self.sequence,
+            sessions: self.state.sessions().cloned().collect(),
+            turns: self.state.turns().cloned().collect(),
+            tool_items: self.state.tool_items().cloned().collect(),
+            pending_requests: self.state.pending_requests().cloned().collect(),
+            repositories: self.state.repositories().cloned().collect(),
+            integrations: self.state.integrations().cloned().collect(),
+        }
+    }
+
+    pub fn synchronize_after(&self, after_sequence: u64) -> BrokerSyncResponse {
+        if after_sequence == 0 || after_sequence > self.sequence {
+            return self.snapshot_response();
+        }
+        if after_sequence == self.sequence {
+            return BrokerSyncResponse::Replay {
+                after_sequence,
+                through_sequence: self.sequence,
+                events: Vec::new(),
+            };
+        }
+
+        let expected_first = after_sequence + 1;
+        let events = self
+            .replay
+            .iter()
+            .filter(|event| event.sequence.get() > after_sequence)
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut previous_sequence = after_sequence;
+        let contiguous = events.iter().all(|event| {
+            let Some(expected) = previous_sequence.checked_add(1) else {
+                return false;
+            };
+            if event.sequence.get() != expected {
+                return false;
+            }
+            previous_sequence = expected;
+            true
+        });
+        let complete = contiguous
+            && events.first().map(|event| event.sequence.get()) == Some(expected_first)
+            && events.last().map(|event| event.sequence.get()) == Some(self.sequence)
+            && events.len() as u64 == self.sequence - after_sequence;
+
+        if !complete {
+            return self.snapshot_response();
+        }
+
+        BrokerSyncResponse::Replay {
+            after_sequence,
+            through_sequence: self.sequence,
+            events,
+        }
+    }
+
+    fn snapshot_response(&self) -> BrokerSyncResponse {
+        BrokerSyncResponse::Snapshot {
+            snapshot: self.snapshot(),
+        }
+    }
+}
+
+impl BrokerUpdate {
+    fn source(&self) -> SourceKind {
+        match self {
+            Self::UpsertSession(value) => value.identity.source,
+            Self::PatchSessionState(value) => value.identity.source,
+            Self::UpsertTurn(value) => value.identity.source,
+            Self::UpsertToolItem(value) => value.identity.source,
+            Self::UpsertPendingRequest(value) => value.identity.source,
+            Self::UpsertRepository(value) => value.identity.source,
+            Self::UpsertIntegration(_) => SourceKind::Integration,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::num::NonZeroUsize;
+
+    use super::*;
+    use crate::broker::reducer::{BrokerUpdate, SessionStatePatch};
+    use crate::broker::types::{
+        ConnectionHealth, OpaqueId, SessionActivity, SessionLifecycle, WaitingState,
+        DOMAIN_SCHEMA_VERSION,
+    };
+
+    fn id(value: &str) -> OpaqueId {
+        OpaqueId::new(value).unwrap()
+    }
+
+    fn session(identity: &str) -> Session {
+        Session {
+            schema_version: SchemaVersion::current(),
+            identity: super::super::types::SourceScopedId::new(
+                SourceKind::CodexCliObserver,
+                id(identity),
+            ),
+            thread_id: None,
+            agent_id: None,
+            parent_agent_id: None,
+            repository_id: None,
+            worktree_id: None,
+            display_name: None,
+            model: None,
+            lifecycle: SessionLifecycle::Unknown,
+            activity: SessionActivity::Unknown,
+            waiting: WaitingState::Unknown,
+            connection: ConnectionHealth::Unknown,
+            started_at_unix_ms: None,
+            last_seen_at_unix_ms: None,
+        }
+    }
+
+    fn small_stream(capacity: usize) -> BrokerStream {
+        BrokerStream::with_replay_capacity(NonZeroUsize::new(capacity).unwrap())
+    }
+
+    #[test]
+    fn snapshot_and_replay_cursors_share_the_current_monotonic_sequence() {
+        let mut stream = BrokerStream::default();
+        let empty = stream.snapshot();
+        assert_eq!(empty.schema_version.get(), DOMAIN_SCHEMA_VERSION);
+        assert_eq!(empty.sequence, 0);
+        assert!(empty.sessions.is_empty());
+        assert!(matches!(
+            stream.synchronize_after(0),
+            BrokerSyncResponse::Snapshot { snapshot } if snapshot.sequence == 0
+        ));
+
+        let first = session("session-1");
+        let receipt = stream
+            .apply(BrokerUpdate::UpsertSession(first.clone()), 100)
+            .unwrap();
+        assert_eq!(receipt.outcome, ApplyOutcome::Changed);
+        assert_eq!(receipt.sequence, 1);
+        assert_eq!(stream.sequence(), 1);
+
+        let duplicate = stream
+            .apply(BrokerUpdate::UpsertSession(first), 101)
+            .unwrap();
+        assert_eq!(duplicate.outcome, ApplyOutcome::Unchanged);
+        assert_eq!(duplicate.sequence, 1);
+        assert_eq!(stream.sequence(), 1);
+        assert!(matches!(
+            stream.synchronize_after(1),
+            BrokerSyncResponse::Replay { events, through_sequence: 1, .. } if events.is_empty()
+        ));
+
+        let snapshot = serde_json::to_value(stream.snapshot()).unwrap();
+        assert_eq!(snapshot["schemaVersion"], DOMAIN_SCHEMA_VERSION);
+        assert_eq!(snapshot["sequence"], 1);
+        assert_eq!(snapshot["sessions"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn replay_contains_contiguous_serializable_updates_and_their_source() {
+        let mut stream = BrokerStream::default();
+        let identity = session("session-1").identity;
+        stream
+            .apply(BrokerUpdate::UpsertSession(session("session-1")), 1_000)
+            .unwrap();
+        stream
+            .apply(
+                BrokerUpdate::PatchSessionState(SessionStatePatch {
+                    identity,
+                    lifecycle: Some(SessionLifecycle::Active),
+                    activity: None,
+                    waiting: None,
+                    connection: None,
+                }),
+                1_001,
+            )
+            .unwrap();
+
+        let response = stream.synchronize_after(1);
+        let response_json = serde_json::to_value(&response).unwrap();
+        assert_eq!(response_json["kind"], "replay");
+        assert_eq!(response_json["afterSequence"], 1);
+        assert_eq!(response_json["throughSequence"], 2);
+        let BrokerSyncResponse::Replay {
+            after_sequence,
+            through_sequence,
+            events,
+        } = response
+        else {
+            panic!("a retained cursor should receive replay");
+        };
+        assert_eq!(after_sequence, 1);
+        assert_eq!(through_sequence, 2);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].sequence.get(), 2);
+        assert_eq!(events[0].source, SourceKind::CodexCliObserver);
+        assert_eq!(events[0].observed_at_unix_ms, 1_001);
+        assert!(events[0].correlation.session_id.is_none());
+        let serialized = serde_json::to_value(&events[0]).unwrap();
+        assert_eq!(serialized["schemaVersion"], DOMAIN_SCHEMA_VERSION);
+        assert_eq!(serialized["sequence"], 2);
+        assert_eq!(serialized["payload"]["kind"], "patch_session_state");
+    }
+
+    #[test]
+    fn fresh_stale_and_future_cursors_receive_a_snapshot() {
+        let mut stream = small_stream(2);
+        for identity in ["session-1", "session-2", "session-3"] {
+            stream
+                .apply(BrokerUpdate::UpsertSession(session(identity)), 10)
+                .unwrap();
+        }
+
+        assert!(matches!(
+            stream.synchronize_after(0),
+            BrokerSyncResponse::Snapshot { snapshot } if snapshot.sequence == 3 && snapshot.sessions.len() == 3
+        ));
+        assert!(matches!(
+            stream.synchronize_after(4),
+            BrokerSyncResponse::Snapshot { snapshot } if snapshot.sequence == 3
+        ));
+
+        let BrokerSyncResponse::Replay {
+            after_sequence,
+            through_sequence,
+            events,
+        } = stream.synchronize_after(1)
+        else {
+            panic!("the retained cursor should replay");
+        };
+        assert_eq!(after_sequence, 1);
+        assert_eq!(through_sequence, 3);
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].sequence.get(), 2);
+        assert_eq!(events[1].sequence.get(), 3);
+    }
+
+    #[test]
+    fn an_internal_replay_gap_falls_back_to_a_complete_snapshot() {
+        let mut stream = BrokerStream::default();
+        for identity in ["session-1", "session-2", "session-3", "session-4"] {
+            stream
+                .apply(BrokerUpdate::UpsertSession(session(identity)), 10)
+                .unwrap();
+        }
+        stream.replay.retain(|event| event.sequence.get() != 3);
+
+        assert!(matches!(
+            stream.synchronize_after(1),
+            BrokerSyncResponse::Snapshot { snapshot }
+                if snapshot.sequence == 4 && snapshot.sessions.len() == 4
+        ));
+    }
+
+    #[test]
+    fn sequence_exhaustion_fails_before_mutating_state() {
+        let mut stream = BrokerStream {
+            sequence: u64::MAX,
+            ..BrokerStream::default()
+        };
+        let error = stream
+            .apply(BrokerUpdate::UpsertSession(session("session-1")), 1)
+            .unwrap_err();
+        assert_eq!(error, StreamError::SequenceExhausted);
+        assert_eq!(stream.sequence(), u64::MAX);
+        assert_eq!(stream.state().sessions().count(), 0);
+    }
+
+    #[test]
+    fn snapshots_keep_all_current_entity_families() {
+        let stream = BrokerStream::default();
+        let snapshot = stream.snapshot();
+        let json = serde_json::to_value(snapshot).unwrap();
+        for field in [
+            "sessions",
+            "turns",
+            "toolItems",
+            "pendingRequests",
+            "repositories",
+            "integrations",
+        ] {
+            assert!(json[field].is_array(), "snapshot field {field} is missing");
+        }
+    }
+
+    #[test]
+    fn requested_replay_capacity_cannot_exceed_the_global_bound() {
+        let stream = BrokerStream::with_replay_capacity(NonZeroUsize::new(usize::MAX).unwrap());
+        assert!(stream.replay.capacity() <= DEFAULT_REPLAY_CAPACITY);
+    }
+}

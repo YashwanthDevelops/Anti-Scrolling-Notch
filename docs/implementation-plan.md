@@ -36,7 +36,7 @@ Stage 4 is integrated through SHELL-07 by PR #14, but Stage 4 is not complete. S
 
 Stage 5 packet 1 is limited to the verified Codex CLI observer portion of CORE-09: secure and bound the existing named-pipe transport while preserving its exact two-field wire contract and four verified events. The legacy Claude hook/decision pipe, CORE-01–08 and CORE-10–11 reducer/store/request work, and all Stage 6+ production monitoring remain outside this packet. CORE-09 stays unchecked until its remaining planned pipe scope is addressed; packet-level completion is recorded separately in the execution ledger.
 
-Stage 5 packet 1 is integrated by PR #15 at `40d2fce80c5cae04138f50038ed1c4057cd99cfe`. Packet 2 implemented CORE-01 only and was integrated by PR #16 at `1cc8f7f953a8a1cdcca7806967e92fdfcbd6227e`: versioned backend records and serialization/validation tests. The Codex observer remains anonymous and limited to its four captured event names; CORE-01 does not infer session identities or introduce source-event schemas. Packet 3 implements CORE-02 only: a pure in-memory reducer over normalized records, as scoped in [`stage-5-packet-3-reducer.md`](work-packets/stage-5-packet-3-reducer.md). Sequence allocation/replay, SQLite/history, request routing, frontend store/UI, and production monitoring stay in their owning later CORE tasks.
+Stage 5 packet 1 is integrated by PR #15 at `40d2fce80c5cae04138f50038ed1c4057cd99cfe`. Packet 2 implemented CORE-01 only and was integrated by PR #16 at `1cc8f7f953a8a1cdcca7806967e92fdfcbd6227e`: versioned backend records and serialization/validation tests. The Codex observer remains anonymous and limited to its four captured event names; CORE-01 does not infer session identities or introduce source-event schemas. Packet 3 implemented CORE-02 only and was integrated by PR #17 at `5f0637e13a25bf3d92356b2d2bd50c2ba24471e`: a pure in-memory reducer over normalized records. Packet 4 implements CORE-03's backend synchronization foundation: snapshots, monotonic sequencing and bounded replay. CORE-03 stays unchecked until the CORE-10 view store requests snapshots on reload and resynchronizes after sequence gaps. SQLite/history, source-event deduplication, request routing and production monitoring remain in their owning later CORE tasks.
 
 ## Release scopes and inherited-feature decisions
 
@@ -307,7 +307,7 @@ Tasks:
 
 - [x] **CORE-01** Define versioned Session, Turn, ToolItem, PendingRequest, Repository, Integration and EventEnvelope types.
 - [x] **CORE-02** Build a Rust reducer keyed by source/session/thread/turn/tool/agent IDs. Keep lifecycle, activity, waiting state and connection health separate.
-- [ ] **CORE-03** Add snapshot plus monotonic event sequence/replay. UI reload or sequence gaps trigger resynchronization.
+- [ ] **CORE-03** Add snapshot plus monotonic event sequence/replay. The CORE-10 view store requests a snapshot on UI reload and resynchronizes after sequence gaps.
 - [ ] **CORE-04** Add bounded SQLite history, atomic/migrated preferences and redacted rotating logs. Sensitive content retention is configurable and off by default.
 - [ ] **CORE-05** Deduplicate source events; coalesce high-volume text deltas without losing final content/control events. Replace ticker array-index change detection with sequence IDs.
 - [ ] **CORE-06** Scope timers to source event/turn generation. A delayed success/badge timer cannot reset newer work.

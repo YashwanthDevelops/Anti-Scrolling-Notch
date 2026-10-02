@@ -4,4 +4,5 @@
 //! Codex event schemas and do not enable any adapter or capability.
 
 pub mod reducer;
+pub mod stream;
 pub mod types;
