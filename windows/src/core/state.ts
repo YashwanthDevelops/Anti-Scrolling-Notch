@@ -18,6 +18,8 @@ export interface AgentTask {
   name: string;
   color: string;
   state: BotStateName;
+  /** Local invalidation token for delayed UI work; never a Codex event ID. */
+  activityGeneration: number;
   stepSequence: number;
   stepGeneration: number;
   steps: TaskStep[];
@@ -61,7 +63,8 @@ export interface SearchResult {
 const task = (
   id: string, name: string, color: string, source: AgentSource,
 ): AgentTask => ({
-  id, name, color, state: "idle", stepSequence: 0, stepGeneration: 0, steps: [], source, isIntegration: true,
+  id, name, color, state: "idle", activityGeneration: 0,
+  stepSequence: 0, stepGeneration: 0, steps: [], source, isIntegration: true,
 });
 
 /** AgentTask.integrationAgents — same ids, names and colours as macOS. */
@@ -165,6 +168,20 @@ class AppState {
   capabilities: CapabilityRegistry | null = null;
 
   private listeners = new Set<Listener>();
+  /** Unique app-local tokens keep delayed work stale across task removal/re-addition. */
+  private activityGeneration = 0;
+
+  private nextActivityGeneration(): number {
+    const floor = this.tasks.reduce((maximum, task) =>
+      Number.isSafeInteger(task.activityGeneration)
+        ? Math.max(maximum, task.activityGeneration)
+        : maximum, this.activityGeneration);
+    if (floor >= Number.MAX_SAFE_INTEGER) {
+      throw new RangeError("Task activity generation exhausted its safe integer range.");
+    }
+    this.activityGeneration = floor + 1;
+    return this.activityGeneration;
+  }
 
   subscribe(fn: Listener): () => void {
     this.listeners.add(fn);
@@ -196,16 +213,44 @@ class AppState {
     this.notify();
   }
 
-  updateTask(id: string, state: BotStateName) {
+  updateTask(id: string, state: BotStateName): number | null {
     const t = this.tasks.find((x) => x.id === id);
-    if (!t) return;
+    if (!t) return null;
+    t.activityGeneration = this.nextActivityGeneration();
     t.state = state;
     this.notify();
+    return t.activityGeneration;
+  }
+
+  currentActivityGeneration(id: string): number | null {
+    return this.tasks.find((x) => x.id === id)?.activityGeneration ?? null;
+  }
+
+  /** Apply delayed state only if no newer task activity invalidated its token. */
+  transitionTaskIfGeneration(
+    id: string,
+    generation: number,
+    expectedStates: readonly BotStateName[],
+    nextState: BotStateName,
+    cleanup: { clearSteps?: boolean; clearBadge?: boolean } = {},
+  ): boolean {
+    const t = this.tasks.find((x) => x.id === id);
+    if (!t || t.activityGeneration !== generation || !expectedStates.includes(t.state)) return false;
+    t.activityGeneration = this.nextActivityGeneration();
+    t.state = nextState;
+    if (cleanup.clearSteps) {
+      t.stepGeneration += 1;
+      t.steps = [];
+    }
+    if (cleanup.clearBadge) t.pillBadge = null;
+    this.notify();
+    return true;
   }
 
   appendStep(id: string, step: string) {
     const t = this.tasks.find((x) => x.id === id);
     if (!t) return;
+    t.activityGeneration = this.nextActivityGeneration();
     t.stepSequence += 1;
     t.steps.push({ sequence: t.stepSequence, text: step });
     if (t.steps.length > 20) t.steps.shift();
@@ -215,6 +260,7 @@ class AppState {
   replaceSteps(id: string, steps: string[]) {
     const t = this.tasks.find((x) => x.id === id);
     if (!t) return;
+    t.activityGeneration = this.nextActivityGeneration();
     t.stepGeneration += 1;
     t.steps = steps.map((text) => ({ sequence: ++t.stepSequence, text }));
     if (t.steps.length > 20) t.steps = t.steps.slice(-20);
@@ -223,6 +269,7 @@ class AppState {
   clearSteps(id: string) {
     const t = this.tasks.find((x) => x.id === id);
     if (t) {
+      t.activityGeneration = this.nextActivityGeneration();
       t.stepGeneration += 1;
       t.steps = [];
     }
@@ -241,7 +288,9 @@ class AppState {
       const shouldLoad =
         proto.id === "integration_claude" || this.settings.activeIntegrations.includes(proto.id);
       const idx = this.tasks.findIndex((t) => t.id === proto.id);
-      if (shouldLoad && idx < 0) this.tasks.push({ ...proto, steps: [] });
+      if (shouldLoad && idx < 0) {
+        this.tasks.push({ ...proto, activityGeneration: this.nextActivityGeneration(), steps: [] });
+      }
       if (!shouldLoad && idx >= 0) this.tasks.splice(idx, 1);
     }
     // Keep the declared order so pills never shuffle.

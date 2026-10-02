@@ -12,6 +12,15 @@ const CLAUDE_ID = "integration_claude";
 
 /** Clears the approval card if no decision was made before the hook gave up. */
 let pendingTimeout: number | null = null;
+/** Expires the finished badge only while the same task activity is still current. */
+let stopResetTimeout: number | null = null;
+
+/** Apply the Stop timeout only while its task result is still current. */
+export function expireStopResult(generation: number): boolean {
+  return State.transitionTaskIfGeneration(
+    CLAUDE_ID, generation, ["finished"], "idle", { clearBadge: true },
+  );
+}
 
 interface HookPayload {
   hook_event_name?: string;
@@ -200,10 +209,15 @@ function handleHook(island: Island, payload: HookPayload) {
       Sound.play("finish");
       if (focused) surface("finished", true);
       else State.setPillBadge(CLAUDE_ID, "finished");
-      window.setTimeout(() => {
-        State.updateTask(CLAUDE_ID, "idle");
-        State.setPillBadge(CLAUDE_ID, null);
+      const generation = State.currentActivityGeneration(CLAUDE_ID);
+      if (stopResetTimeout != null) window.clearTimeout(stopResetTimeout);
+      if (generation == null) break;
+      const timer = window.setTimeout(() => {
+        if (stopResetTimeout !== timer) return;
+        stopResetTimeout = null;
+        expireStopResult(generation);
       }, 5200);
+      stopResetTimeout = timer;
       break;
 
     case "StopFailure":
