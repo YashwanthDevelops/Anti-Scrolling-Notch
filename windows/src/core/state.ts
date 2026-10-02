@@ -95,6 +95,8 @@ export interface Settings {
   toggleShortcut: string;
   autostart: boolean;
   hooksInstalled: boolean;
+  /** Store redacted turn summaries and plans in bounded local history. */
+  retainHistoryContent: boolean;
   /** Claude model used by the chat. */
   model: string;
 }
@@ -113,6 +115,7 @@ export const DEFAULT_SETTINGS: Settings = {
   toggleShortcut: "CommandOrControl+Alt+Shift+Space",
   autostart: false,
   hooksInstalled: false,
+  retainHistoryContent: false,
   model: "claude-opus-5",
 };
 

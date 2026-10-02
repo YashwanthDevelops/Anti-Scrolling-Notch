@@ -14,6 +14,7 @@ mod log;
 mod pipe;
 mod secrets;
 mod settings;
+pub mod storage;
 mod tray;
 mod win_user;
 
@@ -39,6 +40,7 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 pub struct Shared {
     pub settings: Mutex<Settings>,
+    pub history: Mutex<Option<storage::HistoryStore>>,
     pub gate: Arc<PollGate>,
     shortcut_status: Mutex<ShortcutStatus>,
 }
@@ -512,6 +514,13 @@ fn open_settings_window(app: AppHandle) {
 
 pub fn run() {
     let loaded = settings::load();
+    let history = match storage::HistoryStore::open(&settings::history_path()) {
+        Ok(history) => Some(history),
+        Err(error) => {
+            log::line(format!("local history storage unavailable: {error}"));
+            None
+        }
+    };
     let gate = Arc::new(PollGate::new());
 
     tauri::Builder::default()
@@ -534,6 +543,7 @@ pub fn run() {
         )
         .manage(Shared {
             settings: Mutex::new(loaded.clone()),
+            history: Mutex::new(history),
             gate: gate.clone(),
             shortcut_status: Mutex::new(ShortcutStatus::default()),
         })
@@ -607,7 +617,7 @@ pub fn run() {
             ));
             hooks::ensure_hook_exe(&handle);
             pipe::start(handle.clone());
-            codex_pipe::start();
+            codex_pipe::start(handle.clone());
             integrations::start(handle.clone());
             Ok(())
         })
