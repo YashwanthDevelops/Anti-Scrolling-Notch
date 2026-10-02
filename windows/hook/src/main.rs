@@ -55,10 +55,16 @@ fn pipe_path() -> String {
 
 /// Codex's observing adapter uses a separate backend-only pipe. It must never
 /// enter the inherited Claude event listener or its approval/UI handlers.
-fn codex_pipe_path() -> String {
-    let key = win::current_user_sid()
-        .unwrap_or_else(|| std::env::var("USERNAME").unwrap_or_else(|_| "user".into()));
-    format!(r"\\.\pipe\{CODEX_PIPE_PREFIX}-{key}")
+fn codex_pipe_path() -> Option<String> {
+    codex_pipe_path_from_sid(win::current_user_sid())
+}
+
+fn codex_pipe_path_for_sid(sid: &str) -> String {
+    format!(r"\\.\pipe\{CODEX_PIPE_PREFIX}-{sid}")
+}
+
+fn codex_pipe_path_from_sid(sid: Option<String>) -> Option<String> {
+    sid.map(|sid| codex_pipe_path_for_sid(&sid))
 }
 
 /// Opens the pipe. Retries only while the server is busy: any other error means
@@ -147,6 +153,9 @@ fn run_codex_observer() {
 }
 
 fn send_codex_observation(observation: CodexHookObservation) {
+    let Some(pipe_path) = codex_pipe_path() else {
+        return;
+    };
     let Ok(mut payload) = serde_json::to_vec(&observation) else {
         return;
     };
@@ -156,7 +165,7 @@ fn send_codex_observation(observation: CodexHookObservation) {
     // hold the Codex turn. Closing the process drops the pending pipe handle.
     let (tx, rx) = mpsc::channel::<bool>();
     std::thread::spawn(move || {
-        let sent = connect_to(&codex_pipe_path())
+        let sent = connect_to(&pipe_path)
             .and_then(|mut pipe| pipe.write_all(&payload).ok().map(|()| pipe.flush().is_ok()))
             .unwrap_or(false);
         let _ = tx.send(sent);
@@ -302,6 +311,15 @@ fn talk(payload: &str, waits_for_answer: bool) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn codex_pipe_requires_a_sid_and_uses_no_username_fallback() {
+        assert!(codex_pipe_path_from_sid(None).is_none());
+        assert_eq!(
+            codex_pipe_path_from_sid(Some("S-1-5-21-current".into())).as_deref(),
+            Some(r"\\.\pipe\anti-scrolling-notch-codex-S-1-5-21-current")
+        );
+    }
 
     #[test]
     fn decision_json_matches_the_documented_shape() {

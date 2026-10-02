@@ -30,6 +30,12 @@ The earlier [repository audit](coucou-analysis.md) defines 124 catalog entries a
 | GitHub | Read-first PR/review/check monitoring with conditional polling; optional hosted webhooks later. |
 | Branding | Own project/runtime IDs and upstream attribution. Retain inherited visual assets during development as replaceable resources; review rights and clear or replace affected assets before any public/distributable build. |
 
+### Owner-authorized execution sequence update — 2 October 2026
+
+Stage 4 is integrated through SHELL-07 by PR #14, but Stage 4 is not complete. SHELL-08 remains pending because its session/history detail view needs the Stage 5 state/history foundation and Stage 6 session data; the planned PR inspection also needs Stage 7 GitHub data. SHELL-09 remains pending as a separate inherited-feature classification task. Per the project owner's direction, Stage 5 is now the active implementation focus while both Stage 4 tasks remain unchecked. This is an explicit execution-sequence exception, not a change to their requirements or a claim that Stage 4 is complete.
+
+Stage 5 packet 1 is limited to the verified Codex CLI observer portion of CORE-09: secure and bound the existing named-pipe transport while preserving its exact two-field wire contract and four verified events. The legacy Claude hook/decision pipe, CORE-01–08 and CORE-10–11 reducer/store/request work, and all Stage 6+ production monitoring remain outside this packet. CORE-09 stays unchecked until its remaining planned pipe scope is addressed; packet-level completion is recorded separately in the execution ledger.
+
 ## Release scopes and inherited-feature decisions
 
 | Release profile | Required user outcome | Required stages |
