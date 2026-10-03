@@ -11,8 +11,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::Serialize;
 
 use super::types::{
-    ConnectionHealth, Integration, OpaqueId, PendingRequest, Repository, SchemaVersion, Session,
-    SessionActivity, SessionLifecycle, SourceKind, SourceScopedId, ToolItem, Turn, WaitingState,
+    ConnectionHealth, Integration, OpaqueId, PendingRequest, Repository, RequestLifecycle,
+    SchemaVersion, Session, SessionActivity, SessionLifecycle, SourceKind, SourceScopedId,
+    ToolItem, Turn, WaitingState,
 };
 
 type RelationIndex = BTreeMap<SourceScopedId, BTreeSet<SourceScopedId>>;
@@ -282,6 +283,24 @@ impl BrokerState {
 
     fn upsert_pending_request(&mut self, next: PendingRequest) -> ApplyOutcome {
         let identity = next.identity.clone();
+        if matches!(
+            next.lifecycle,
+            RequestLifecycle::Resolved | RequestLifecycle::Expired | RequestLifecycle::Cancelled
+        ) {
+            let Some(previous) = self.pending_requests.get(&identity) else {
+                return ApplyOutcome::Unchanged;
+            };
+            let mut expected = previous.clone();
+            expected.lifecycle = next.lifecycle;
+            if expected != next {
+                return ApplyOutcome::Unchanged;
+            }
+            let Some(previous) = self.pending_requests.remove(&identity) else {
+                return ApplyOutcome::Unchanged;
+            };
+            self.index_request(&previous, false);
+            return ApplyOutcome::Changed;
+        }
         if self.pending_requests.get(&identity) == Some(&next) {
             return ApplyOutcome::Unchanged;
         }
@@ -503,8 +522,8 @@ fn indexed_values<'a, T>(
 mod tests {
     use super::*;
     use crate::broker::types::{
-        ConfigurationState, IntegrationProvider, RequestKind, RequestLifecycle, SessionActivity,
-        SessionLifecycle, ToolItemState, TurnLifecycle, TurnOutcome,
+        ConfigurationState, IntegrationProvider, RequestKind, SessionActivity, SessionLifecycle,
+        ToolItemState, TurnLifecycle, TurnOutcome,
     };
 
     fn id(value: &str) -> OpaqueId {
@@ -703,6 +722,65 @@ mod tests {
         assert_eq!(state.turns_for_session(&session_key).len(), 1);
         assert_eq!(state.tool_items_for_session(&session_key).len(), 1);
         assert_eq!(state.requests_for_session(&session_key).len(), 1);
+    }
+
+    #[test]
+    fn terminal_request_updates_clear_active_entry_and_every_index() {
+        for lifecycle in [
+            RequestLifecycle::Resolved,
+            RequestLifecycle::Expired,
+            RequestLifecycle::Cancelled,
+        ] {
+            let mut state = BrokerState::default();
+            let mut codex = request(SourceKind::CodexCliObserver, "same-id", "codex-session");
+            let other_source = request(SourceKind::LocalGit, "same-id", "git-session");
+            state.apply(BrokerUpdate::UpsertPendingRequest(codex.clone()));
+            state.apply(BrokerUpdate::UpsertPendingRequest(other_source));
+
+            let identity = codex.identity.clone();
+            let mut conflicting_terminal = codex.clone();
+            conflicting_terminal.turn_id = Some(id("different-turn"));
+            conflicting_terminal.lifecycle = lifecycle;
+            assert_eq!(
+                state.apply(BrokerUpdate::UpsertPendingRequest(conflicting_terminal)),
+                ApplyOutcome::Unchanged
+            );
+            assert_eq!(state.pending_request(&identity), Some(&codex));
+
+            codex.lifecycle = lifecycle;
+            assert_eq!(
+                state.apply(BrokerUpdate::UpsertPendingRequest(codex.clone())),
+                ApplyOutcome::Changed
+            );
+            assert!(state.pending_request(&identity).is_none());
+            assert_eq!(state.pending_requests().count(), 1);
+
+            for relationship in [
+                scoped_id(SourceKind::CodexCliObserver, "codex-session"),
+                scoped_id(SourceKind::CodexCliObserver, "thread-1"),
+                scoped_id(SourceKind::CodexCliObserver, "turn-1"),
+                scoped_id(SourceKind::CodexCliObserver, "tool-1"),
+                scoped_id(SourceKind::CodexCliObserver, "agent-1"),
+            ] {
+                assert!(state.requests_for_session(&relationship).is_empty());
+                assert!(state.requests_for_thread(&relationship).is_empty());
+                assert!(state.requests_for_turn(&relationship).is_empty());
+                assert!(state.requests_for_tool_item(&relationship).is_empty());
+                assert!(state.requests_for_agent(&relationship).is_empty());
+            }
+
+            assert_eq!(
+                state.apply(BrokerUpdate::UpsertPendingRequest(codex)),
+                ApplyOutcome::Unchanged
+            );
+            assert_eq!(state.pending_requests().count(), 1);
+            assert_eq!(
+                state
+                    .requests_for_session(&scoped_id(SourceKind::LocalGit, "git-session"))
+                    .len(),
+                1
+            );
+        }
     }
 
     #[test]

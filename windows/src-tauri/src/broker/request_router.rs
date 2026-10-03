@@ -145,9 +145,16 @@ pub enum Registration {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TerminalCleanup {
+    Removed,
+    NotTracked,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RouteError {
     InvalidSourceScope,
     UnsupportedLifecycle,
+    TerminalUpdateRequired,
     MissingDeadline,
     DeadlineElapsed,
     RequestCapacityReached,
@@ -169,6 +176,7 @@ impl fmt::Display for RouteError {
         formatter.write_str(match self {
             Self::InvalidSourceScope => "request and session source identities do not match",
             Self::UnsupportedLifecycle => "request is not pending or presented",
+            Self::TerminalUpdateRequired => "request update is not resolved, expired or cancelled",
             Self::MissingDeadline => "request has no source-supplied deadline",
             Self::DeadlineElapsed => "request deadline has elapsed",
             Self::RequestCapacityReached => "request router capacity is full",
@@ -190,8 +198,8 @@ impl fmt::Display for RouteError {
 impl std::error::Error for RouteError {}
 
 /// Process-local bounded routing state. Entries are not silently evicted:
-/// once its fixed capacity is reached, registration fails closed until a
-/// future packet defines safe terminal-request cleanup and replay horizons.
+/// once its fixed capacity is reached, registration fails closed until an
+/// authoritative terminal source update releases a tracked route.
 #[derive(Debug)]
 pub struct RequestRouter {
     entries: BTreeMap<SourceScopedId, RequestEntry>,
@@ -251,6 +259,32 @@ impl RequestRouter {
             },
         );
         Ok(Registration::Inserted)
+    }
+
+    /// Release a route only after an authoritative source update reports a
+    /// terminal lifecycle. Exact request metadata must still match the route,
+    /// even when its deadline has elapsed. This handles resolution in another
+    /// client without treating a local adapter result as source resolution.
+    pub fn clear_terminal_update(
+        &mut self,
+        request: &PendingRequest,
+    ) -> Result<TerminalCleanup, RouteError> {
+        if !matches!(
+            request.lifecycle,
+            RequestLifecycle::Resolved | RequestLifecycle::Expired | RequestLifecycle::Cancelled
+        ) {
+            return Err(RouteError::TerminalUpdateRequired);
+        }
+
+        let id = request.identity.clone();
+        let Some(entry) = self.entries.get(&id) else {
+            return Ok(TerminalCleanup::NotTracked);
+        };
+        let current = source_signature(request)?;
+        ensure_same_signature(entry, &current)?;
+
+        self.entries.remove(&id);
+        Ok(TerminalCleanup::Removed)
     }
 
     /// Begin a presentation attempt. A later acknowledgement must carry the
@@ -418,6 +452,14 @@ fn signature(request: &PendingRequest, now_unix_ms: u64) -> Result<RequestSignat
     ) {
         return Err(RouteError::UnsupportedLifecycle);
     }
+    let current = source_signature(request)?;
+    if now_unix_ms >= current.deadline_unix_ms {
+        return Err(RouteError::DeadlineElapsed);
+    }
+    Ok(current)
+}
+
+fn source_signature(request: &PendingRequest) -> Result<RequestSignature, RouteError> {
     if request
         .session_id
         .as_ref()
@@ -428,9 +470,6 @@ fn signature(request: &PendingRequest, now_unix_ms: u64) -> Result<RequestSignat
     let deadline_unix_ms = request
         .deadline_unix_ms
         .ok_or(RouteError::MissingDeadline)?;
-    if now_unix_ms >= deadline_unix_ms {
-        return Err(RouteError::DeadlineElapsed);
-    }
     Ok(RequestSignature {
         key: RequestRouteKey {
             request_id: request.identity.clone(),
@@ -860,6 +899,75 @@ mod tests {
     }
 
     #[test]
+    fn terminal_source_updates_clear_routes_and_reject_late_completions() {
+        let registry = registry(true, CAPABILITY_GENERATION);
+        for (index, lifecycle) in [
+            RequestLifecycle::Resolved,
+            RequestLifecycle::Expired,
+            RequestLifecycle::Cancelled,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let mut router = RequestRouter::new();
+            let request = request(
+                SourceKind::CodexCliObserver,
+                &format!("request-{index}"),
+                &format!("session-{index}"),
+            );
+            let presentation = presented(&mut router, &request);
+            let attempt = router
+                .claim_reply(
+                    &registry,
+                    CAPABILITY_GENERATION,
+                    &request,
+                    &presentation,
+                    PermissionDecision::Deny,
+                    NOW,
+                )
+                .unwrap();
+            let mut terminal = request;
+            terminal.lifecycle = lifecycle;
+
+            assert_eq!(
+                router.clear_terminal_update(&terminal),
+                Ok(TerminalCleanup::Removed)
+            );
+            assert_eq!(router.tracked_requests(), 0);
+            assert_eq!(router.in_flight_replies(), 0);
+            assert_eq!(
+                router.complete_reply(attempt, DeliveryOutcome::AcceptedByAdapter),
+                Err(RouteError::UnknownRequest)
+            );
+            assert_eq!(
+                router.clear_terminal_update(&terminal),
+                Ok(TerminalCleanup::NotTracked)
+            );
+        }
+    }
+
+    #[test]
+    fn conflicting_or_nonterminal_updates_do_not_clear_a_route() {
+        let mut router = RequestRouter::new();
+        let request = request(SourceKind::CodexCliObserver, "request-1", "session-1");
+        router.register(&request, NOW).unwrap();
+
+        let mut changed_scope = request.clone();
+        changed_scope.turn_id = Some(id("different-turn"));
+        changed_scope.lifecycle = RequestLifecycle::Resolved;
+        assert_eq!(
+            router.clear_terminal_update(&changed_scope),
+            Err(RouteError::ConflictingRequestIdentity)
+        );
+
+        assert_eq!(
+            router.clear_terminal_update(&request),
+            Err(RouteError::TerminalUpdateRequired)
+        );
+        assert_eq!(router.tracked_requests(), 1);
+    }
+
+    #[test]
     fn tracking_capacity_rejects_without_eviction() {
         let mut router = RequestRouter::new();
         for index in 0..MAX_TRACKED_REQUESTS {
@@ -875,6 +983,15 @@ mod tests {
             router.register(&overflow, NOW),
             Err(RouteError::RequestCapacityReached)
         );
+        assert_eq!(router.tracked_requests(), MAX_TRACKED_REQUESTS);
+
+        let mut cancelled = request(SourceKind::CodexCliObserver, "request-0", "session-0");
+        cancelled.lifecycle = RequestLifecycle::Cancelled;
+        assert_eq!(
+            router.clear_terminal_update(&cancelled),
+            Ok(TerminalCleanup::Removed)
+        );
+        assert_eq!(router.register(&overflow, NOW), Ok(Registration::Inserted));
         assert_eq!(router.tracked_requests(), MAX_TRACKED_REQUESTS);
     }
 }
