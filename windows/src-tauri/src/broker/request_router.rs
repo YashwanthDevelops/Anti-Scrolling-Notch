@@ -500,6 +500,9 @@ fn ensure_same_signature(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::broker::reducer::BrokerUpdate;
+    use crate::broker::service::BrokerService;
+    use crate::broker::stream::BrokerSyncResponse;
     use crate::broker::types::{SchemaVersion, SourceKind};
     use crate::capabilities::{CapabilityEntry, REGISTRY_SCHEMA_VERSION};
 
@@ -944,6 +947,73 @@ mod tests {
                 Ok(TerminalCleanup::NotTracked)
             );
         }
+    }
+
+    #[test]
+    fn failed_delivery_stays_pending_until_external_resolution_reaches_snapshot() {
+        let mut router = RequestRouter::new();
+        let broker = BrokerService::default();
+        let pending = request(SourceKind::CodexCliObserver, "request-1", "session-1");
+        let (created, _) = broker
+            .apply(
+                BrokerUpdate::UpsertPendingRequest(pending.clone()),
+                NOW,
+                None,
+                None,
+            )
+            .unwrap();
+        assert_eq!(created.sequence, 1);
+
+        let presentation = presented(&mut router, &pending);
+        let attempt = router
+            .claim_reply(
+                &registry(true, CAPABILITY_GENERATION),
+                CAPABILITY_GENERATION,
+                &pending,
+                &presentation,
+                PermissionDecision::Allow,
+                NOW,
+            )
+            .unwrap();
+        assert_eq!(
+            router.complete_reply(attempt, DeliveryOutcome::RejectedBeforeSend),
+            Ok(ReplyCompletion {
+                request: presentation.key.clone(),
+                outcome: DeliveryOutcome::RejectedBeforeSend,
+            })
+        );
+        assert_eq!(router.tracked_requests(), 1);
+
+        let BrokerSyncResponse::Snapshot { snapshot } = broker.synchronize_after(0).unwrap() else {
+            panic!("fresh broker consumers must receive a snapshot");
+        };
+        assert_eq!(snapshot.sequence, 1);
+        assert_eq!(snapshot.pending_requests, vec![pending.clone()]);
+
+        // A different client may resolve the request. Only that authoritative
+        // terminal record clears both router tracking and broker snapshot state.
+        let mut resolved = pending;
+        resolved.lifecycle = RequestLifecycle::Resolved;
+        assert_eq!(
+            router.clear_terminal_update(&resolved),
+            Ok(TerminalCleanup::Removed)
+        );
+        let (terminal, _) = broker
+            .apply(
+                BrokerUpdate::UpsertPendingRequest(resolved),
+                NOW + 1,
+                None,
+                None,
+            )
+            .unwrap();
+        assert_eq!(terminal.sequence, 2);
+
+        let BrokerSyncResponse::Snapshot { snapshot } = broker.synchronize_after(0).unwrap() else {
+            panic!("fresh broker consumers must receive a snapshot");
+        };
+        assert_eq!(snapshot.sequence, 2);
+        assert!(snapshot.pending_requests.is_empty());
+        assert_eq!(router.tracked_requests(), 0);
     }
 
     #[test]
