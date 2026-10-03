@@ -257,7 +257,7 @@ test("terminal request replay removes only the exact matching active record", as
 
 test("bridge failures remain explicit and a later sync can recover", async () => {
   const transport = new TestTransport();
-  transport.responses.push(new BridgeCallError("broker_sync", "backend unavailable"));
+  transport.responses.push(new BridgeCallError("broker_sync", "invocation_failed"));
   const store = new BrokerViewStore(transport);
   await store.start();
 
