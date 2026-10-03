@@ -6,7 +6,6 @@
 //! boundary. The verified event is retained locally but remains anonymous and
 //! is not converted into reducer/session state.
 
-use std::ffi::c_void;
 use std::io;
 use std::os::windows::io::AsRawHandle;
 use std::sync::Arc;
@@ -15,14 +14,8 @@ use std::time::Duration;
 use codex_hook_contract::{parse_wire_message, CodexHookObservation, MAX_WIRE_BYTES};
 use tauri::{AppHandle, Manager};
 use tokio::io::AsyncReadExt;
-use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
+use tokio::net::windows::named_pipe::NamedPipeServer;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
-use windows::core::PCWSTR;
-use windows::Win32::Foundation::{LocalFree, HLOCAL};
-use windows::Win32::Security::Authorization::{
-    ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
-};
-use windows::Win32::Security::{PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES};
 
 use crate::log;
 
@@ -73,41 +66,7 @@ fn create_listener_pool(name: &str, sid: &str) -> io::Result<Vec<NamedPipeServer
 }
 
 fn create_server(name: &str, sid: &str, first: bool) -> io::Result<NamedPipeServer> {
-    // A protected DACL containing one allow ACE for the current user's SID.
-    // The relay opens the pipe for both reading and writing; no other account
-    // or inherited broad group is granted access.
-    let sddl = format!("D:P(A;;GRGW;;;{sid})");
-    let wide_sddl = sddl.encode_utf16().chain(Some(0)).collect::<Vec<_>>();
-    let mut descriptor = PSECURITY_DESCRIPTOR::default();
-    unsafe {
-        ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            PCWSTR(wide_sddl.as_ptr()),
-            SDDL_REVISION_1,
-            &mut descriptor,
-            None,
-        )
-        .map_err(win_error)?;
-    }
-    let _descriptor = LocalAllocation(descriptor.0);
-    let mut attributes = SECURITY_ATTRIBUTES {
-        nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
-        lpSecurityDescriptor: descriptor.0,
-        bInheritHandle: false.into(),
-    };
-
-    let mut options = ServerOptions::new();
-    options
-        .first_pipe_instance(first)
-        .max_instances(MAX_PIPE_INSTANCES)
-        .reject_remote_clients(true);
-    // The Tokio API passes these attributes directly to CreateNamedPipeW.
-    // The descriptor remains alive until that synchronous call has returned.
-    unsafe {
-        options.create_with_security_attributes_raw(
-            name,
-            (&mut attributes as *mut SECURITY_ATTRIBUTES).cast::<c_void>(),
-        )
-    }
+    crate::private_pipe::create_server(name, sid, first, MAX_PIPE_INSTANCES)
 }
 
 async fn accept_loop(
@@ -232,24 +191,9 @@ async fn read_message(pipe: &mut NamedPipeServer) -> Option<Vec<u8>> {
     }
 }
 
-fn win_error(error: windows::core::Error) -> io::Error {
-    io::Error::other(error.to_string())
-}
-
-struct LocalAllocation(*mut c_void);
-
-impl Drop for LocalAllocation {
-    fn drop(&mut self) {
-        if !self.0.is_null() {
-            unsafe {
-                let _ = LocalFree(Some(HLOCAL(self.0)));
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use std::ffi::c_void;
     use std::os::windows::io::AsRawHandle;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::Instant;
@@ -257,8 +201,8 @@ mod tests {
     use codex_hook_contract::{CodexHookEvent, CodexHookObservation};
     use tokio::io::AsyncWriteExt;
     use tokio::net::windows::named_pipe::ClientOptions;
-    use windows::core::PWSTR;
-    use windows::Win32::Foundation::HANDLE;
+    use windows::core::{PCWSTR, PWSTR};
+    use windows::Win32::Foundation::{LocalFree, HANDLE, HLOCAL};
     use windows::Win32::Security::Authorization::{
         ConvertSecurityDescriptorToStringSecurityDescriptorW,
         ConvertStringSecurityDescriptorToSecurityDescriptorW, GetSecurityInfo, SDDL_REVISION_1,
@@ -267,6 +211,22 @@ mod tests {
     use windows::Win32::Security::{DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR};
 
     use super::*;
+
+    fn win_error(error: windows::core::Error) -> io::Error {
+        io::Error::other(error.to_string())
+    }
+
+    struct LocalAllocation(*mut c_void);
+
+    impl Drop for LocalAllocation {
+        fn drop(&mut self) {
+            if !self.0.is_null() {
+                unsafe {
+                    let _ = LocalFree(Some(HLOCAL(self.0)));
+                }
+            }
+        }
+    }
 
     fn test_pipe_name(sid: &str) -> String {
         static NEXT_PIPE: AtomicU64 = AtomicU64::new(0);

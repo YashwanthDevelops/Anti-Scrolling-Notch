@@ -45,12 +45,18 @@ const MAX_FIELD_LEN: usize = 2_000;
 mod win;
 
 /// `\\.\pipe\anti-scrolling-notch-<sid>`. The SID keeps two accounts on the same machine from
-/// ever meeting on the same pipe; the name falls back to the user name only if
-/// the SID cannot be read at all, which should not happen.
-fn pipe_path() -> String {
-    let key = win::current_user_sid()
-        .unwrap_or_else(|| std::env::var("USERNAME").unwrap_or_else(|_| "user".into()));
-    format!(r"\\.\pipe\{APP_PIPE_PREFIX}-{key}")
+/// ever meeting on the same pipe; no username fallback is used when SID lookup
+/// fails.
+fn pipe_path() -> Option<String> {
+    pipe_path_from_sid(win::current_user_sid())
+}
+
+fn pipe_path_for_sid(sid: &str) -> String {
+    format!(r"\\.\pipe\{APP_PIPE_PREFIX}-{sid}")
+}
+
+fn pipe_path_from_sid(sid: Option<String>) -> Option<String> {
+    sid.map(|sid| pipe_path_for_sid(&sid))
 }
 
 /// Codex's observing adapter uses a separate backend-only pipe. It must never
@@ -70,7 +76,7 @@ fn codex_pipe_path_from_sid(sid: Option<String>) -> Option<String> {
 /// Opens the pipe. Retries only while the server is busy: any other error means
 /// there is nothing to talk to, and waiting would only delay Claude Code.
 fn connect() -> Option<std::fs::File> {
-    connect_to(&pipe_path())
+    connect_to(&pipe_path()?)
 }
 
 fn connect_to(path: &str) -> Option<std::fs::File> {
@@ -191,8 +197,8 @@ fn decision_json(decision: &str) -> Option<String> {
 
 /// Reads stdin and returns the payload to forward plus the event name.
 fn read_event() -> Option<(String, String)> {
-    let mut raw = Vec::new();
-    if std::io::stdin().read_to_end(&mut raw).is_err() || raw.is_empty() {
+    let mut raw = read_bounded_input(std::io::stdin())?;
+    if raw.is_empty() {
         return None;
     }
     // Some shells hand us a UTF-8 BOM; serde_json would choke on it.
@@ -257,6 +263,15 @@ fn read_event() -> Option<(String, String)> {
     Some((line, event))
 }
 
+fn read_bounded_input(reader: impl Read) -> Option<Vec<u8>> {
+    let mut raw = Vec::new();
+    reader
+        .take((MAX_HOOK_INPUT_BYTES + 1) as u64)
+        .read_to_end(&mut raw)
+        .ok()?;
+    (raw.len() <= MAX_HOOK_INPUT_BYTES).then_some(raw)
+}
+
 /// Caps every string in the payload. A single Write can carry a whole file.
 fn truncate_strings(value: &mut serde_json::Value) {
     match value {
@@ -290,14 +305,21 @@ fn talk(payload: &str, waits_for_answer: bool) -> Option<String> {
         return None;
     }
 
+    const MAX_DECISION_RESPONSE_BYTES: usize = 64;
     let mut buf = Vec::new();
-    let mut chunk = [0u8; 1024];
+    let mut chunk = [0u8; MAX_DECISION_RESPONSE_BYTES];
     loop {
         match pipe.read(&mut chunk) {
             Ok(0) => break,
             Ok(n) => {
+                if buf.len().checked_add(n)? > MAX_DECISION_RESPONSE_BYTES {
+                    return None;
+                }
                 buf.extend_from_slice(&chunk[..n]);
-                if buf.contains(&b'\n') {
+                if let Some(end) = buf.iter().position(|byte| *byte == b'\n') {
+                    if end + 1 != buf.len() {
+                        return None;
+                    }
                     break;
                 }
             }
@@ -313,12 +335,49 @@ mod tests {
     use super::*;
 
     #[test]
+    fn app_pipe_requires_a_sid_and_uses_the_product_namespace() {
+        assert!(pipe_path_from_sid(None).is_none());
+        assert_eq!(
+            pipe_path_from_sid(Some("S-1-5-21-current".into())).as_deref(),
+            Some(r"\\.\pipe\anti-scrolling-notch-S-1-5-21-current")
+        );
+    }
+
+    #[test]
     fn codex_pipe_requires_a_sid_and_uses_no_username_fallback() {
         assert!(codex_pipe_path_from_sid(None).is_none());
         assert_eq!(
             codex_pipe_path_from_sid(Some("S-1-5-21-current".into())).as_deref(),
             Some(r"\\.\pipe\anti-scrolling-notch-codex-S-1-5-21-current")
         );
+    }
+
+    #[test]
+    fn inherited_hook_input_is_bounded_at_the_shared_contract_limit() {
+        use std::io::Cursor;
+
+        assert_eq!(
+            read_bounded_input(Cursor::new(vec![b'x'; MAX_HOOK_INPUT_BYTES]))
+                .unwrap()
+                .len(),
+            MAX_HOOK_INPUT_BYTES
+        );
+        assert!(read_bounded_input(Cursor::new(vec![b'x'; MAX_HOOK_INPUT_BYTES + 1])).is_none());
+    }
+
+    #[test]
+    fn absent_app_pipe_returns_without_waiting_for_a_listener() {
+        use std::time::Instant;
+
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let name = format!(
+            r"\\.\pipe\anti-scrolling-notch-no-listener-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        );
+        let started = Instant::now();
+        assert!(connect_to(&name).is_none());
+        assert!(started.elapsed() < CONNECT_TIMEOUT);
     }
 
     #[test]

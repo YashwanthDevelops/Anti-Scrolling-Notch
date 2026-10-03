@@ -5,10 +5,10 @@
 | Packet | Stage 5, packet 9: CORE-08 terminal request cleanup |
 | Release profile | Monitor MVP request-state foundation |
 | Task IDs | CORE-08 cleanup sub-scope only |
-| Branch / PR | `work/stage-5-core-08-request-cleanup` / pending |
+| Branch / PR | `work/stage-5-core-08-request-cleanup` / [PR #24](https://github.com/YashwanthDevelops/Anti-Scrolling-Notch/pull/24) |
 | Dependencies | Integrated CORE-07 process-local request-routing contract; no verified Codex request producer or reply adapter |
 | User outcome | An authoritative resolved, expired or cancelled request stops appearing in active backend request state and frees its exact in-memory route |
-| Status | Active |
+| Status | Integrated on main at `6efabcace80b8137acb759f2e9e5585f0d8c57f0` |
 
 ## In scope
 
@@ -40,4 +40,4 @@ This is backend state cleanup only. No Tauri command, UI, timer, hook installati
 
 Reducer terminal upserts now remove an active request only when all request fields other than lifecycle match; mismatched source/request metadata leaves the active record and every index intact. Router reconciliation applies the same exact signature rule and releases a route on a source `Resolved`, `Expired` or `Cancelled` update, including after its deadline. Any late in-flight completion is rejected as unknown, and a cleared slot can be reused. The existing stream sequences a terminal update for replay while its current snapshot omits the removed request.
 
-Validation passed: focused broker tests (43 passed); `cargo test --workspace --locked` (96 passed, 2 installed-app tests ignored); `cargo clippy --workspace --all-targets --locked`; rustfmt check for `broker/request_router.rs`; `docs/check-markdown.ps1`; and `git diff --check`. Clippy reports only the existing `src-tauri/src/hooks.rs:467` `needless_range_loop` warning. Whole-file rustfmt checks for `reducer.rs` and `stream.rs` still report formatting differences in unchanged legacy tests; the newly added/changed hunks produce no formatter diff. No frontend/resource checks were needed. Hosted Windows CI and Build are pending publication. CORE-08 remains unchecked because the accepted Codex contract still supplies no real request event or presentation-fallback response semantics.
+Validation passed: focused broker tests (43 passed); `cargo test --workspace --locked` (96 passed, 2 installed-app tests ignored); `cargo clippy --workspace --all-targets --locked`; rustfmt check for `broker/request_router.rs`; `docs/check-markdown.ps1`; and `git diff --check`. Clippy reports only the existing `src-tauri/src/hooks.rs:467` `needless_range_loop` warning. Whole-file rustfmt checks for `reducer.rs` and `stream.rs` still report formatting differences in unchanged legacy tests; the newly added/changed hunks produce no formatter diff. No frontend/resource checks were needed. PR #24 passed Windows CI run 58 and Build run 67 on final head 5761ed533b047eab7614bcb445888ca330a8c769 and was merged at 6efabcace80b8137acb759f2e9e5585f0d8c57f0. CORE-08 remains unchecked because the accepted Codex contract still supplies no real request event or presentation-fallback response semantics.
