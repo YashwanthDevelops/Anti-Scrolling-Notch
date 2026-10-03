@@ -5,7 +5,7 @@
 | Packet | Stage 5, packet 10: complete the remaining CORE-09 hook-relay transport slice |
 | Release profile | Monitor MVP transport foundation |
 | Task IDs | CORE-09 — inherited app-hook relay only; the Codex observer slice was completed by packet 1 |
-| Branch / PR | `work/stage-5-core-09-pipe-boundaries` / pending |
+| Branch / PR | `work/stage-5-core-09-pipe-boundaries` / [PR #25](https://github.com/YashwanthDevelops/Anti-Scrolling-Notch/pull/25) |
 | Dependencies | Packet 1 Codex pipe hardening (PR #15 merge `40d2fce80c5cae04138f50038ed1c4057cd99cfe`), packet 9 (PR #24 merge `6efabcace80b8137acb759f2e9e5585f0d8c57f0`), existing hook relay wire contract |
 | User outcome | The inherited hook relay accepts only bounded messages from the current Windows user and cannot be held indefinitely by idle or excessive clients |
 | In scope | Share the private named-pipe server helper; apply the current-user DACL, same-user sender verification, SID-only pipe namespace, first-instance collision rejection, bounded listeners/clients, one-message 1 MiB input framing, two-second receive/response-write deadlines, bounded relay stdin and decision response |
@@ -34,7 +34,7 @@ The app pipe uses a protected DACL, rejects remote clients, claims the first pip
 
 The inherited app pipe now shares private server creation with the Codex observer, authenticates same-user clients before JSON parsing, and holds only eight listener and eight active-client permits. Its accepted object format and permission exchange remain intact. Input is bounded to the existing 1 MiB hook contract, receive and decision writes are bounded to two seconds, and relay stdin/decision responses cannot grow without limit. The app and relay require the SID-namespaced pipe path.
 
-The focused Windows pipe suite passed 12 tests and the hook relay suite passed 7. The final locked workspace run passed 93 app tests, 7 hook tests, 2 runtime-identity tests and 6 hook-contract tests; 2 installed-app tests were ignored. Workspace Clippy passed with only the inherited warning in `src-tauri/src/hooks.rs:467`. Scoped rustfmt, the app debug build and optimized hook relay build passed. The established Codex hook transport replay passed the four accepted projections, nine neutral negative cases and four absent-app cases (14–18 ms). The runtime-identity check passed; the changed-document checker validated four Markdown files and the diff whitespace check passed. Hosted CI and PR integration remain pending.
+The focused Windows pipe suite passed 12 tests and the hook relay suite passed 7. The final locked workspace run passed 93 app tests, 7 hook tests, 2 runtime-identity tests and 6 hook-contract tests; 2 installed-app tests were ignored. Workspace Clippy passed with only the inherited warning in `src-tauri/src/hooks.rs:467`. Scoped rustfmt, the app debug build and optimized hook relay build passed. The established Codex hook transport replay passed the four accepted projections, nine neutral negative cases and four absent-app cases (14–18 ms). The runtime-identity check passed; the changed-document checker validated four Markdown files and the diff whitespace check passed. PR #25 passed Windows CI run 60 and Build run 69 on initial head `e8e2231738d9961ac0360090b9b26c2c2c75fc4e`. A documentation-only closeout commit is being checked as the final PR head before merge.
 
 ## Integration and limitations
 
