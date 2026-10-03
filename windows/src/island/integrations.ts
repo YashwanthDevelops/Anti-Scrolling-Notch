@@ -5,6 +5,7 @@
 import { onEvent, Bridge, type IntegrationUpdate } from "../core/bridge";
 import { Sound } from "../core/sound";
 import { State } from "../core/state";
+import { BrokerView } from "../core/view-store";
 import type { Island } from "./island";
 
 /** Which Credential Manager key backs each pill. */
@@ -28,6 +29,7 @@ export function expireIntegrationResult(id: string, generation: number): boolean
 }
 
 export function registerIntegrationHandlers(island: Island) {
+  BrokerView.subscribe(() => State.notify());
   void onEvent<IntegrationUpdate>("integration", (update) => handle(island, update));
   void refreshConfigured();
 }

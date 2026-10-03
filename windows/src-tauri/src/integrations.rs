@@ -10,12 +10,17 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager};
 
+use crate::broker::reducer::BrokerUpdate;
+use crate::broker::types::{
+    ConfigurationState, ConnectionHealth, Integration, IntegrationErrorKind, IntegrationProvider,
+    OpaqueId, SchemaVersion,
+};
 use crate::island::WINDOW_LABEL;
 use crate::log;
 use crate::secrets;
@@ -42,7 +47,64 @@ pub struct IntegrationEvent {
 }
 
 fn emit(app: &AppHandle, update: IntegrationUpdate) {
+    let observed_at_unix_ms = unix_time_ms();
+    if let (Some(shared), Some(health)) = (
+        app.try_state::<crate::Shared>(),
+        integration_health(update.id, update.error.is_some()),
+    ) {
+        if crate::publish_broker_update(
+            app,
+            &shared,
+            BrokerUpdate::UpsertIntegration(health),
+            observed_at_unix_ms,
+            None,
+            None,
+        )
+        .is_err()
+        {
+            log::line(format!("broker health update failed for {}", update.id));
+        }
+    }
     let _ = app.emit_to(WINDOW_LABEL, "integration", update);
+}
+
+/// Project only the existing poller's bounded health outcome into broker state.
+/// Response JSON and free-form errors remain on the legacy presentation event.
+fn integration_health(id: &str, failed: bool) -> Option<Integration> {
+    let provider = match id {
+        "integration_github" => IntegrationProvider::GitHub,
+        "integration_vercel" => IntegrationProvider::Vercel,
+        "integration_n8n" => IntegrationProvider::N8n,
+        "integration_stripe" => IntegrationProvider::Stripe,
+        "integration_resend" => IntegrationProvider::Resend,
+        "integration_notion" => IntegrationProvider::Notion,
+        "integration_calcom" => IntegrationProvider::CalCom,
+        _ => return None,
+    };
+    Some(Integration {
+        schema_version: SchemaVersion::current(),
+        identity: OpaqueId::new(id).ok()?,
+        provider,
+        configuration: ConfigurationState::Unknown,
+        connection: if failed {
+            ConnectionHealth::Degraded
+        } else {
+            ConnectionHealth::Healthy
+        },
+        last_success_at_unix_ms: None,
+        data_revision: None,
+        retry_at_unix_ms: None,
+        last_error: failed.then_some(IntegrationErrorKind::Other),
+        unread_event_ids: Vec::new(),
+    })
+}
+
+fn unix_time_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .and_then(|duration| u64::try_from(duration.as_millis()).ok())
+        .unwrap_or_default()
 }
 
 fn client() -> reqwest::Client {
@@ -761,5 +823,82 @@ fn fmt_value(v: &Value) -> String {
         Value::Array(a) => format!("[{}]", a.len()),
         Value::Object(_) => "{…}".into(),
         other => other.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod broker_projection_tests {
+    use super::*;
+    use crate::broker::service::BrokerService;
+    use crate::broker::stream::BrokerSyncResponse;
+
+    #[test]
+    fn integration_health_projection_uses_only_known_ids_and_coarse_health() {
+        let healthy = integration_health("integration_github", false).unwrap();
+        assert_eq!(healthy.provider, IntegrationProvider::GitHub);
+        assert_eq!(healthy.connection, ConnectionHealth::Healthy);
+        assert_eq!(healthy.configuration, ConfigurationState::Unknown);
+        assert_eq!(healthy.last_error, None);
+        assert_eq!(healthy.last_success_at_unix_ms, None);
+        assert_eq!(healthy.data_revision, None);
+
+        let failed = integration_health("integration_github", true).unwrap();
+        assert_eq!(failed.connection, ConnectionHealth::Degraded);
+        assert_eq!(failed.last_error, Some(IntegrationErrorKind::Other));
+        assert_eq!(failed.last_success_at_unix_ms, None);
+
+        assert!(integration_health("integration_claude", false).is_none());
+        assert!(integration_health("unrecognized-integration", true).is_none());
+    }
+
+    #[test]
+    fn broker_health_projection_contains_no_response_data_or_free_form_error() {
+        let health = integration_health("integration_vercel", true).unwrap();
+        let serialized = serde_json::to_value(health).unwrap();
+        let object = serialized.as_object().unwrap();
+        assert_eq!(object["connection"], "degraded");
+        assert_eq!(object["lastError"], "other");
+        assert!(!object.contains_key("data"));
+        assert!(!object.contains_key("error"));
+    }
+
+    #[test]
+    fn projected_health_enters_the_existing_snapshot_and_replay_service() {
+        let service = BrokerService::default();
+        let healthy = integration_health("integration_github", false).unwrap();
+        let (first, initial) = service
+            .apply(
+                BrokerUpdate::UpsertIntegration(healthy.clone()),
+                100,
+                None,
+                None,
+            )
+            .unwrap();
+        assert_eq!(first.sequence, 1);
+        assert!(matches!(
+            initial,
+            Some(BrokerSyncResponse::Snapshot { snapshot })
+                if snapshot.integrations == vec![healthy]
+        ));
+
+        let degraded = integration_health("integration_github", true).unwrap();
+        let (second, replay) = service
+            .apply(
+                BrokerUpdate::UpsertIntegration(degraded.clone()),
+                200,
+                None,
+                None,
+            )
+            .unwrap();
+        assert_eq!(second.sequence, 2);
+        assert!(matches!(
+            replay,
+            Some(BrokerSyncResponse::Replay {
+                after_sequence: 1,
+                through_sequence: 2,
+                events,
+            }) if events.len() == 1
+                && matches!(&events[0].payload, BrokerUpdate::UpsertIntegration(value) if value == &degraded)
+        ));
     }
 }

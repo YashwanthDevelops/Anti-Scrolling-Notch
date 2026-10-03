@@ -11,7 +11,7 @@ import { capabilityRequestGeneration } from "../core/capability-guard.js";
 import { createMiniBot, pruneMiniBots } from "../mochi/minibots";
 import { buildPrompt } from "./chat";
 import { buildChoose, buildUpload, buildUploading } from "./upload";
-import { renderIntegrationCard, type IntegrationCardHooks } from "./integrations";
+import { integrationHealth, renderIntegrationCard, type IntegrationCardHooks } from "./integrations";
 
 export interface ViewActions {
   setView(v: IslandViewName): void;
@@ -206,9 +206,10 @@ function buildOverview(actions: ViewActions): ViewHost {
         ticker.sync(task);
       } else if (task) {
         const info = State.integrations[task.id];
+        const health = integrationHealth(task.id);
         const key = [
           task.id, detailOpen, task.state, task.steps.map((step) => step.text).join("|"),
-          info?.loaded, info?.error, info?.configured,
+          info?.loaded, info?.error, info?.configured, health?.connection, health?.lastError,
           JSON.stringify(info?.data ?? {}),
         ].join("~");
         if (key !== cardKey) {

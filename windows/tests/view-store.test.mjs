@@ -76,6 +76,22 @@ function pendingRequest(id, lifecycle = "pending", fields = {}) {
   };
 }
 
+function integration(id, connection = "healthy", fields = {}) {
+  return {
+    schemaVersion: 1,
+    identity: id,
+    provider: "github",
+    configuration: "unknown",
+    connection,
+    lastSuccessAtUnixMs: null,
+    dataRevision: null,
+    retryAtUnixMs: null,
+    lastError: null,
+    unreadEventIds: [],
+    ...fields,
+  };
+}
+
 function envelope(sequence, payload) {
   return {
     schemaVersion: 1,
@@ -253,6 +269,31 @@ test("terminal request replay removes only the exact matching active record", as
   await flushEvents();
   assert.equal(store.snapshot.sequence, 2);
   assert.deepEqual(store.snapshot.pendingRequests, [unrelated]);
+});
+
+test("integration health is recovered from snapshots and applied through sequenced replay", async () => {
+  const transport = new TestTransport();
+  const initial = emptySnapshot(3);
+  initial.integrations.push(integration("integration_github"));
+  transport.responses.push({ kind: "snapshot", snapshot: initial });
+  const store = new BrokerViewStore(transport);
+  await store.start();
+
+  transport.emit({
+    kind: "replay",
+    afterSequence: 3,
+    throughSequence: 4,
+    events: [envelope(4, {
+      kind: "upsert_integration",
+      value: integration("integration_github", "degraded", { lastError: "other" }),
+    })],
+  });
+  await flushEvents();
+
+  assert.equal(store.snapshot.sequence, 4);
+  assert.deepEqual(store.snapshot.integrations, [
+    integration("integration_github", "degraded", { lastError: "other" }),
+  ]);
 });
 
 test("bridge failures remain explicit and a later sync can recover", async () => {

@@ -27,7 +27,14 @@ export interface BrokerPendingRequest {
 export interface BrokerIntegration {
   schemaVersion: 1;
   identity: string;
-  [key: string]: unknown;
+  provider: "github" | "vercel" | "n8n" | "stripe" | "resend" | "notion" | "cal_com";
+  configuration: "unknown" | "unconfigured" | "configured";
+  connection: "unknown" | "healthy" | "degraded" | "offline";
+  lastSuccessAtUnixMs: number | null;
+  dataRevision: number | null;
+  retryAtUnixMs: number | null;
+  lastError: "authentication" | "permission" | "rate_limited" | "network" | "invalid_response" | "other" | null;
+  unreadEventIds: string[];
 }
 
 export interface BrokerRecord {
