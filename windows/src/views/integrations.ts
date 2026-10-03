@@ -8,6 +8,7 @@ import { h, svg, clear, dot } from "./dom";
 import { ICONS } from "./icons";
 import { State, type AgentTask } from "../core/state";
 import { Bridge } from "../core/bridge";
+import { BrokerView } from "../core/view-store";
 
 /** Same shape as the Swift `timeAgo` computed properties. */
 export function timeAgo(value: unknown): string {
@@ -37,6 +38,10 @@ function get(id: string): Record<string, unknown> {
   return (State.integrations[id]?.data ?? {}) as Record<string, unknown>;
 }
 
+export function integrationHealth(id: string) {
+  return BrokerView.snapshot.integrations.find((integration) => integration.identity === id) ?? null;
+}
+
 function arr(id: string, key: string): Record<string, unknown>[] {
   const v = get(id)[key];
   return Array.isArray(v) ? (v as Record<string, unknown>[]) : [];
@@ -56,12 +61,21 @@ const OPEN_URLS: Record<string, string> = {
 function idleCard(task: AgentTask, openSettings: () => void): HTMLElement {
   const info = State.integrations[task.id];
   const configured = info?.configured ?? false;
-  const error = info?.error ?? null;
+  const health = integrationHealth(task.id);
+  const failed = health?.connection === "degraded" || health?.connection === "offline";
+  const presentationError = info?.error ?? null;
+  const error = health
+    ? (failed || presentationError
+        ? presentationError ?? "Connection needs attention"
+        : null)
+    : presentationError;
   // The Claude Code pill is about hooks, not a key — the macOS wording would be
   // misleading here.
   const missing = task.id === "integration_claude" ? "Hooks not installed" : "Key not configured";
   const label = error ?? (configured ? "Connected · loading…" : missing);
-  const statusColor = error || !configured ? "#F4505E" : "#22C55E";
+  const statusColor = health
+    ? (failed || presentationError || !configured ? "#F4505E" : "#22C55E")
+    : (error || !configured ? "#F4505E" : "#22C55E");
 
   const actions = h("div", { class: "int-actions" });
   if (task.id === "integration_claude") {
