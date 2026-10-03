@@ -42,8 +42,47 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 pub struct Shared {
     pub settings: Mutex<Settings>,
     pub history: Mutex<Option<storage::HistoryStore>>,
+    pub broker: broker::service::BrokerService,
     pub gate: Arc<PollGate>,
     shortcut_status: Mutex<ShortcutStatus>,
+}
+
+#[tauri::command]
+fn broker_sync(
+    shared: State<Shared>,
+    after_sequence: u64,
+) -> Result<broker::stream::BrokerSyncResponse, String> {
+    shared
+        .broker
+        .synchronize_after(after_sequence)
+        .map_err(|error| error.to_string())
+}
+
+/// Publish an adapter-normalized broker update and notify the view store.
+/// Raw hook payloads must never be passed here; each producer must first meet
+/// its own compatibility and capability gate.
+pub fn publish_broker_update(
+    app: &AppHandle,
+    shared: &Shared,
+    update: broker::reducer::BrokerUpdate,
+    observed_at_unix_ms: u64,
+    source_event_id: Option<broker::types::OpaqueId>,
+    deduplication_key: Option<broker::types::OpaqueId>,
+) -> Result<broker::stream::ApplyReceipt, String> {
+    let (receipt, notification) = shared
+        .broker
+        .apply(
+            update,
+            observed_at_unix_ms,
+            source_event_id,
+            deduplication_key,
+        )
+        .map_err(|error| error.to_string())?;
+    if let Some(notification) = notification {
+        app.emit("broker-sync", notification)
+            .map_err(|error| format!("could not notify the frontend broker view store: {error}"))?;
+    }
+    Ok(receipt)
 }
 
 #[derive(Clone, Default, Serialize)]
@@ -545,11 +584,13 @@ pub fn run() {
         .manage(Shared {
             settings: Mutex::new(loaded.clone()),
             history: Mutex::new(history),
+            broker: broker::service::BrokerService::default(),
             gate: gate.clone(),
             shortcut_status: Mutex::new(ShortcutStatus::default()),
         })
         .manage(Pending::default())
         .invoke_handler(tauri::generate_handler![
+            broker_sync,
             boot,
             save_settings,
             monitor_options,

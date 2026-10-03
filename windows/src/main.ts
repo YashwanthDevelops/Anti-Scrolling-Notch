@@ -2,6 +2,7 @@
 
 import "./style.css";
 import { Bridge, IS_TAURI, onEvent } from "./core/bridge";
+import { BrokerView } from "./core/view-store";
 import { Sound } from "./core/sound";
 import { State, type Settings } from "./core/state";
 import { Island } from "./island/island";
@@ -21,6 +22,7 @@ async function main() {
     State.settings = { ...State.settings, ...boot.settings };
     State.capabilities = boot.capabilities;
   }
+  if (IS_TAURI) await BrokerView.start();
   island.applySettings();
   State.loadIntegrationTasks();
 
