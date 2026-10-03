@@ -10,6 +10,7 @@ use crate::codex_navigation::{self, InstalledCodexPackage};
 
 pub const REGISTRY_SCHEMA_VERSION: u8 = 1;
 pub const OPEN_CODEX_CAPABILITY: &str = "codex.openApp";
+pub const PERMISSION_DECISION_CAPABILITY: &str = "codex.permissionDecision";
 pub const VERIFIED_CODEX_DESKTOP_VERSION: &str = "26.928.2636.0";
 const VERIFIED_CODEX_PACKAGE_FAMILY: &str = codex_navigation::CODEX_PACKAGE_FAMILY_NAME;
 
@@ -121,7 +122,7 @@ impl CapabilityRegistry {
                 disabled_reason: "No verified App Server protocol version or adapter.",
             }),
             disabled(CapabilityDefinition {
-                id: "codex.permissionDecision",
+                id: PERMISSION_DECISION_CAPABILITY,
                 surface: "Codex permission decisions",
                 supported_version: None,
                 transport: "No verified decision adapter",
