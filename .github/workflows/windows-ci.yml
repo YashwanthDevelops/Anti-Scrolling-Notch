@@ -136,6 +136,9 @@ jobs:
       - name: Test island close and pin guards
         run: npm run test:shell
 
+      - name: Test frontend broker view-store synchronization
+        run: npm run test:view-store
+
       - name: Validate product/runtime identity
         run: npm run test:identity
 

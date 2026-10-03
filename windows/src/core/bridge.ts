@@ -6,6 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { capabilityRequestGeneration } from "./capability-guard.js";
+import type { BrokerSyncIntent, BrokerSyncResponse } from "./broker-types.js";
 import { State, type Settings } from "./state";
 
 export const IS_TAURI =
@@ -45,6 +46,9 @@ export interface ToggleShortcutStatus {
 
 export const Bridge = {
   boot: () => call<BootInfo>("boot"),
+
+  /** Fetch an authoritative backend snapshot or contiguous replay. */
+  syncBroker: (intent: BrokerSyncIntent) => syncBroker(intent),
 
   saveSettings: (settings: Settings) => call<void>("save_settings", { settings }),
 
@@ -177,7 +181,33 @@ async function callOrThrow<T>(cmd: string, args?: Record<string, unknown>): Prom
   return invoke<T>(cmd, args);
 }
 
+/** A typed failure for the new broker synchronization path only. */
+async function syncBroker(intent: BrokerSyncIntent): Promise<BrokerSyncResponse> {
+  const command = "broker_sync";
+  try {
+    if (!IS_TAURI) throw new Error("not running inside Anti-Scrolling-Notch");
+    return await invoke<BrokerSyncResponse>(command, { afterSequence: intent.afterSequence });
+  } catch (error) {
+    throw new BridgeCallError(command, error);
+  }
+}
+
+/** A rejected native invocation with its command name preserved for callers. */
+export class BridgeCallError extends Error {
+  readonly command: string;
+  readonly original: unknown;
+
+  constructor(command: string, original: unknown) {
+    const detail = original instanceof Error ? original.message : String(original);
+    super(`${command} failed: ${detail}`);
+    this.name = "BridgeCallError";
+    this.command = command;
+    this.original = original;
+  }
+}
+
 export type BridgeEvent =
+  | { name: "broker-sync"; payload: BrokerSyncResponse }
   | { name: "cursor"; payload: { x: number; y: number } }
   | { name: "tray"; payload: string }
   | { name: "hook"; payload: Record<string, unknown> }

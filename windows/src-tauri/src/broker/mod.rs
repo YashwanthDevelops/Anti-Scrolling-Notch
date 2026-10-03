@@ -5,5 +5,6 @@
 
 pub mod reducer;
 pub mod request_router;
+pub mod service;
 pub mod stream;
 pub mod types;
