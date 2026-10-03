@@ -7,7 +7,7 @@
 | Packet | Stage 5, packet 15: CORE-11 architecture and contract guards |
 | Release profile | Monitor MVP state-authority foundation |
 | Task IDs | CORE-11 — available architecture and contract-test slice |
-| Branch / PR | `work/stage-5-core-11-contract-guards` / pending |
+| Branch / PR | `work/stage-5-core-11-contract-guards` / [PR #30](https://github.com/YashwanthDevelops/Anti-Scrolling-Notch/pull/30) |
 | Base | Clean `main` and `origin/main` at PR #29 merge `39ba05b3cde971684deb7b323bace69ad631327b` |
 | User outcome | Frontend changes cannot silently bypass the bridge or mutate broker-owned state, and current broker/request failure semantics have an executable cross-component regression test |
 | In scope | Frontend AST architecture tests; a test-only request-router/broker contract test for failed delivery and authoritative external resolution; Windows CI registration; plan and ledger updates |
