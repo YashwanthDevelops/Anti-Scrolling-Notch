@@ -139,6 +139,9 @@ jobs:
       - name: Test frontend broker view-store synchronization
         run: npm run test:view-store
 
+      - name: Test typed native bridge failures
+        run: npm run test:bridge-errors
+
       - name: Validate product/runtime identity
         run: npm run test:identity
 

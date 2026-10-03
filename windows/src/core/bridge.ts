@@ -14,12 +14,7 @@ export const IS_TAURI =
 
 async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
   if (!IS_TAURI) return null;
-  try {
-    return await invoke<T>(cmd, args);
-  } catch (err) {
-    console.error(`[anti-scrolling-notch] ${cmd} failed`, err);
-    return null;
-  }
+  return invokeNative<T>(cmd, args);
 }
 
 export interface BootInfo {
@@ -175,34 +170,37 @@ export interface HookPreview {
   fingerprint: string;
 }
 
-/** Same as `call`, but surfaces the error so the UI can show what went wrong. */
+/** Same as `call`, but rejects when no native command runtime is available. */
 async function callOrThrow<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  if (!IS_TAURI) throw new Error("not running inside Anti-Scrolling-Notch");
-  return invoke<T>(cmd, args);
+  if (!IS_TAURI) throw new BridgeCallError(cmd, "runtime_unavailable");
+  return invokeNative<T>(cmd, args);
 }
 
-/** A typed failure for the new broker synchronization path only. */
-async function syncBroker(intent: BrokerSyncIntent): Promise<BrokerSyncResponse> {
-  const command = "broker_sync";
+/** Invoke a Tauri command without leaking backend error payloads across IPC. */
+async function invokeNative<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   try {
-    if (!IS_TAURI) throw new Error("not running inside Anti-Scrolling-Notch");
-    return await invoke<BrokerSyncResponse>(command, { afterSequence: intent.afterSequence });
-  } catch (error) {
-    throw new BridgeCallError(command, error);
+    return await invoke<T>(cmd, args);
+  } catch {
+    throw new BridgeCallError(cmd, "invocation_failed");
   }
 }
 
-/** A rejected native invocation with its command name preserved for callers. */
-export class BridgeCallError extends Error {
-  readonly command: string;
-  readonly original: unknown;
+/** A safe, command-specific failure for a native bridge operation. */
+export type BridgeCallFailureKind = "runtime_unavailable" | "invocation_failed";
 
-  constructor(command: string, original: unknown) {
-    const detail = original instanceof Error ? original.message : String(original);
-    super(`${command} failed: ${detail}`);
+async function syncBroker(intent: BrokerSyncIntent): Promise<BrokerSyncResponse> {
+  return callOrThrow<BrokerSyncResponse>("broker_sync", { afterSequence: intent.afterSequence });
+}
+
+export class BridgeCallError extends Error {
+  constructor(
+    readonly command: string,
+    readonly kind: BridgeCallFailureKind,
+  ) {
+    super(kind === "runtime_unavailable"
+      ? `${command} requires Anti-Scrolling-Notch`
+      : `${command} failed`);
     this.name = "BridgeCallError";
-    this.command = command;
-    this.original = original;
   }
 }
 
