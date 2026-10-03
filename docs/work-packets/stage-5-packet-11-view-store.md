@@ -5,7 +5,7 @@
 | Packet | Stage 5, packet 11: CORE-10 snapshot/replay view-store foundation |
 | Release profile | Monitor MVP state synchronization foundation |
 | Task IDs | CORE-10 — backend snapshot/replay consumption slice |
-| Branch / PR | `work/stage-5-core-10-view-store` / pending |
+| Branch / PR | `work/stage-5-core-10-view-store` / [PR #26](https://github.com/YashwanthDevelops/Anti-Scrolling-Notch/pull/26) |
 | Dependencies | CORE-02 reducer and CORE-03 snapshot/replay stream; packet 9 terminal-request cleanup; packet 10 protected hook transports |
 | User outcome | The frontend maintains a recoverable, backend-sourced projection and surfaces synchronization failures without inventing Codex session state |
 | In scope | Manage the existing `BrokerStream` in Tauri; expose its snapshot/replay sync command; publish only normalized broker updates through the same existing contract; add a typed frontend view store that applies contiguous replay and resynchronizes gaps; expose bridge errors for this sync path |
@@ -18,6 +18,7 @@
 
 Implemented on the packet branch: Tauri-managed broker stream service and snapshot/replay command; normalized-update event publication; typed bridge error and sync intent; frontend store with initial snapshot, ordered replay, duplicate/stale handling, sequence-gap recovery, immutable snapshots and retryable error state. The store receives no Codex sessions because the accepted hook observation remains anonymous and has no producer in this packet.
 
+Local checks passed: six view-store tests, frontend typecheck and Vite bundle, shell tests (12), capability tests (5), resource tests (2), runtime identity, locked Rust workspace tests (95 passed, 2 installed-app tests ignored), Clippy, locked Tauri debug build, documentation checker and whitespace checks. Clippy has the existing `hooks.rs:467` warning. The new broker files and changed Rust additions are formatted; workspace rustfmt reports pre-existing drift in unchanged files. The local optimized app build encountered a rustc `STATUS_ACCESS_VIOLATION` (`0xc0000005`). Windows CI run 63 and Build run 72 passed on implementation commit `98e839ff8555cb46d3743a38510f65a5b57ed701`; the final PR head is checked separately.
 
 ## Capability and architecture contract
 
