@@ -12,6 +12,7 @@ mod integrations;
 mod island;
 mod log;
 mod pipe;
+mod private_pipe;
 mod secrets;
 mod settings;
 pub mod storage;
