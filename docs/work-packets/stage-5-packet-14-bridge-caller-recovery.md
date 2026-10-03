@@ -7,7 +7,7 @@
 | Packet | Stage 5, packet 14: CORE-10 typed bridge caller recovery |
 | Release profile | Monitor MVP state-authority foundation |
 | Task IDs | CORE-10 — existing caller-side bridge failure slice |
-| Branch / PR | `work/stage-5-core-10-caller-recovery` / PR pending |
+| Branch / PR | `work/stage-5-core-10-caller-recovery` / PR #29 (merged) |
 | Dependencies | PR #26 snapshot/replay view store, PR #27 typed bridge failures, PR #28 integration-health projection; base `230b5ba98ebb866a240ec0093804da7c33ce4fae` |
 | User outcome | Native command failures are surfaced or safely contained at existing callers, and local state is not cleared or changed as if a rejected user action succeeded |
 | In scope | Existing Windows frontend bridge callers in app startup/tray actions, island/views/integration cards, hook acknowledgements/declines, integration credential-status refresh and settings; focused tests and plan/ledger documentation |
