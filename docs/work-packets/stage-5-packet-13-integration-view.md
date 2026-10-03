@@ -5,7 +5,7 @@
 | Packet | Stage 5, packet 13: CORE-10 integration-health projection |
 | Release profile | Monitor MVP state authority foundation |
 | Task IDs | CORE-10 — existing integration-health consumer slice |
-| Branch / PR | `work/stage-5-core-10-integration-view` / PR pending |
+| Branch / PR | `work/stage-5-core-10-integration-view` / [PR #28](https://github.com/YashwanthDevelops/Anti-Scrolling-Notch/pull/28), merged at `230b5ba98ebb866a240ec0093804da7c33ce4fae` |
 | Dependencies | CORE-03 and packet 12 integrated at `9974a28d95b3e17ef5b7f8c60c9465e146833299`; existing broker `Integration` and poller result contracts |
 | User outcome | Current integration connection health comes from the sequenced backend broker snapshot/replay store while existing integration detail cards keep their current content and behavior |
 | In scope | Project the existing integration poller result into the existing typed Rust `Integration` health record; apply/publish it via `BrokerService`; render health through `BrokerView`; test the projection and snapshot/replay path; packet/plan/ledger updates |

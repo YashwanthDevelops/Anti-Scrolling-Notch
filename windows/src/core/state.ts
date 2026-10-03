@@ -89,7 +89,8 @@ export interface IntegrationInfo {
   data: Record<string, unknown>;
   error: string | null;
   loaded: boolean;
-  configured: boolean;
+  /** Null means the credential check has not succeeded yet. */
+  configured: boolean | null;
 }
 
 export interface Settings {

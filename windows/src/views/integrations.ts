@@ -10,6 +10,8 @@ import { State, type AgentTask } from "../core/state";
 import { Bridge } from "../core/bridge";
 import { BrokerView } from "../core/view-store";
 
+type RunBridgeAction = <T>(operation: Promise<T>, failureMessage: string) => void;
+
 /** Same shape as the Swift `timeAgo` computed properties. */
 export function timeAgo(value: unknown): string {
   const date = typeof value === "number" ? new Date(value) : new Date(String(value));
@@ -58,9 +60,10 @@ const OPEN_URLS: Record<string, string> = {
   integration_calcom: "https://app.cal.com/bookings",
 };
 
-function idleCard(task: AgentTask, openSettings: () => void): HTMLElement {
+function idleCard(task: AgentTask, openSettings: () => void, runBridgeAction: RunBridgeAction): HTMLElement {
   const info = State.integrations[task.id];
-  const configured = info?.configured ?? false;
+  const configured = info?.configured ?? null;
+  const configurationKnown = configured !== null;
   const health = integrationHealth(task.id);
   const failed = health?.connection === "degraded" || health?.connection === "offline";
   const presentationError = info?.error ?? null;
@@ -72,10 +75,12 @@ function idleCard(task: AgentTask, openSettings: () => void): HTMLElement {
   // The Claude Code pill is about hooks, not a key — the macOS wording would be
   // misleading here.
   const missing = task.id === "integration_claude" ? "Hooks not installed" : "Key not configured";
-  const label = error ?? (configured ? "Connected · loading…" : missing);
+  const label = error ?? (configured === true
+    ? "Connected · loading…"
+    : configurationKnown ? missing : "Credential status unavailable");
   const statusColor = health
-    ? (failed || presentationError || !configured ? "#F4505E" : "#22C55E")
-    : (error || !configured ? "#F4505E" : "#22C55E");
+    ? (failed || presentationError || configured === false ? "#F4505E" : configured === null ? "#F5A524" : "#22C55E")
+    : (error || configured === false ? "#F4505E" : configured === null ? "#F5A524" : "#22C55E");
 
   const actions = h("div", { class: "int-actions" });
   if (task.id === "integration_claude") {
@@ -84,7 +89,10 @@ function idleCard(task: AgentTask, openSettings: () => void): HTMLElement {
         class: "link-btn",
         style: `color:${task.color}b3`,
         text: "Open Visual Studio Code",
-        onclick: () => void Bridge.openInVSCode(task.sessionCwd ?? null),
+        onclick: () => runBridgeAction(
+          Bridge.openInVSCode(task.sessionCwd ?? null),
+          "Could not open Visual Studio Code.",
+        ),
       }),
     );
   } else if (task.id === "integration_n8n") {
@@ -93,7 +101,7 @@ function idleCard(task: AgentTask, openSettings: () => void): HTMLElement {
         class: "link-btn",
         style: `color:${task.color}d9`,
         text: "Open n8n",
-        onclick: () => void Bridge.openN8n(),
+        onclick: () => runBridgeAction(Bridge.openN8n(), "Could not open n8n."),
       }),
     );
   } else if (OPEN_URLS[task.id]) {
@@ -102,17 +110,17 @@ function idleCard(task: AgentTask, openSettings: () => void): HTMLElement {
         class: "link-btn",
         style: `color:${task.color}d9`,
         text: `Open ${task.name}`,
-        onclick: () => void Bridge.openUrl(OPEN_URLS[task.id]),
+        onclick: () => runBridgeAction(Bridge.openUrl(OPEN_URLS[task.id]), "Could not open that integration."),
       }),
     );
   }
-  if (configured) {
+  if (configured === true) {
     actions.append(
       h("button", {
         class: "link-btn",
         style: `color:${task.color}d9`,
         text: "Refresh",
-        onclick: () => void Bridge.refreshIntegration(task.id),
+        onclick: () => runBridgeAction(Bridge.refreshIntegration(task.id), "Could not refresh this integration."),
       }),
     );
   } else {
@@ -153,7 +161,7 @@ function vercelCard(onDetail: () => void): HTMLElement {
   return h("div", { class: "int-card" }, header("#7C5CFF", "Vercel", "Deployments"), rows);
 }
 
-function vercelDetail(onBack: () => void): HTMLElement {
+function vercelDetail(onBack: () => void, runBridgeAction: RunBridgeAction): HTMLElement {
   const d = arr("integration_vercel", "deployments")[0] ?? {};
   const success = d.state === "READY";
   const accent = success ? "#22C55E" : "#F4505E";
@@ -169,7 +177,7 @@ function vercelDetail(onBack: () => void): HTMLElement {
       h("button", {
         class: "int-link",
         text: String(d.url),
-        onclick: () => void Bridge.openUrl(`https://${d.url}`),
+        onclick: () => runBridgeAction(Bridge.openUrl(`https://${d.url}`), "Could not open this deployment."),
       }),
     );
   }
@@ -279,7 +287,7 @@ function stripeCard(): HTMLElement {
 
 // ── Notion ────────────────────────────────────────────────────────────────────
 
-function notionCard(): HTMLElement {
+function notionCard(runBridgeAction: RunBridgeAction): HTMLElement {
   const rows = h("div", { class: "int-rows tight" });
   for (const p of arr("integration_notion", "pages").slice(0, 3)) {
     rows.append(
@@ -288,7 +296,9 @@ function notionCard(): HTMLElement {
         {
           class: "int-page",
           onclick: () => {
-            if (typeof p.url === "string") void Bridge.openUrl(p.url);
+            if (typeof p.url === "string") {
+              runBridgeAction(Bridge.openUrl(p.url), "Could not open this Notion page.");
+            }
           },
         },
         p.emoji
@@ -331,9 +341,14 @@ function calcomCard(): HTMLElement {
 
 // ── n8n ───────────────────────────────────────────────────────────────────────
 
-function n8nCard(task: AgentTask, onDetail: () => void, openSettings: () => void): HTMLElement {
+function n8nCard(
+  task: AgentTask,
+  onDetail: () => void,
+  openSettings: () => void,
+  runBridgeAction: RunBridgeAction,
+): HTMLElement {
   const hasActivity = task.steps.length > 0 && (task.state === "finished" || task.state === "error");
-  if (!hasActivity) return idleCard(task, openSettings);
+  if (!hasActivity) return idleCard(task, openSettings, runBridgeAction);
   const success = task.state === "finished";
   const accent = success ? "#22C55E" : "#F4505E";
   return h(
@@ -393,6 +408,7 @@ export interface IntegrationCardHooks {
   openDetail(): void;
   closeDetail(): void;
   openSettings(): void;
+  runBridgeAction: RunBridgeAction;
 }
 
 /** True when this integration has data worth showing instead of the idle card. */
@@ -422,12 +438,12 @@ export function renderIntegrationCard(task: AgentTask, hooks: IntegrationCardHoo
     const hasActivity = task.steps.length > 0 && (task.state === "finished" || task.state === "error");
     return hooks.detailOpen && hasActivity
       ? n8nDetail(task, hooks.closeDetail)
-      : n8nCard(task, hooks.openDetail, hooks.openSettings);
+      : n8nCard(task, hooks.openDetail, hooks.openSettings, hooks.runBridgeAction);
   }
   if (task.id === "integration_vercel" && hasIntegrationData(task.id)) {
-    return hooks.detailOpen ? vercelDetail(hooks.closeDetail) : vercelCard(hooks.openDetail);
+    return hooks.detailOpen ? vercelDetail(hooks.closeDetail, hooks.runBridgeAction) : vercelCard(hooks.openDetail);
   }
-  if (!hasIntegrationData(task.id)) return idleCard(task, hooks.openSettings);
+  if (!hasIntegrationData(task.id)) return idleCard(task, hooks.openSettings, hooks.runBridgeAction);
 
   switch (task.id) {
     case "integration_resend":
@@ -437,11 +453,11 @@ export function renderIntegrationCard(task: AgentTask, hooks: IntegrationCardHoo
     case "integration_stripe":
       return stripeCard();
     case "integration_notion":
-      return notionCard();
+      return notionCard(hooks.runBridgeAction);
     case "integration_calcom":
       return calcomCard();
     default:
-      return idleCard(task, hooks.openSettings);
+      return idleCard(task, hooks.openSettings, hooks.runBridgeAction);
   }
 }
 

@@ -2,7 +2,7 @@
 // pollers: a genuinely new item flips the pill to finished/error, badges it when
 // the pill isn't focused, plays a sound, and clears itself after 60 s.
 
-import { onEvent, Bridge, type IntegrationUpdate } from "../core/bridge";
+import { onEvent, Bridge, reportBridgeFailure, type IntegrationUpdate } from "../core/bridge";
 import { Sound } from "../core/sound";
 import { State } from "../core/state";
 import { BrokerView } from "../core/view-store";
@@ -28,24 +28,35 @@ export function expireIntegrationResult(id: string, generation: number): boolean
   );
 }
 
-export function registerIntegrationHandlers(island: Island) {
+export function registerIntegrationHandlers(island: Island, hooksStatusKnown = true) {
   BrokerView.subscribe(() => State.notify());
   void onEvent<IntegrationUpdate>("integration", (update) => handle(island, update));
-  void refreshConfigured();
+  void refreshConfigured(hooksStatusKnown);
 }
 
 /** Asks Rust which keys exist so the idle cards can say so. */
-export async function refreshConfigured() {
+export async function refreshConfigured(hooksStatusKnown = true) {
   for (const [id, key] of Object.entries(KEY_FOR)) {
-    const present = (await Bridge.secretPresent(key)) ?? false;
-    const info = State.integrations[id] ?? { data: {}, error: null, loaded: false, configured: false };
-    State.integrations[id] = { ...info, configured: present };
+    let present: boolean | null;
+    try {
+      present = await Bridge.secretPresent(key);
+    } catch (error) {
+      reportBridgeFailure(error, "integration credential status");
+      const info = State.integrations[id];
+      if (!info) State.integrations[id] = { data: {}, error: null, loaded: false, configured: null };
+      continue;
+    }
+    const info = State.integrations[id] ?? { data: {}, error: null, loaded: false, configured: null };
+    State.integrations[id] = present === null
+      ? info
+      : { ...info, configured: present };
   }
-  const hooks = State.settings.hooksInstalled;
   const claude = State.integrations.integration_claude ?? {
-    data: {}, error: null, loaded: false, configured: false,
+    data: {}, error: null, loaded: false, configured: hooksStatusKnown ? State.settings.hooksInstalled : null,
   };
-  State.integrations.integration_claude = { ...claude, configured: hooks };
+  State.integrations.integration_claude = hooksStatusKnown
+    ? { ...claude, configured: State.settings.hooksInstalled }
+    : claude;
   State.notify();
 }
 

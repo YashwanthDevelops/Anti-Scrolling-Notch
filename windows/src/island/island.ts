@@ -2,7 +2,9 @@
 // Mirrors IslandRootView.swift + IslandWindowController.swift.
 
 import { Tracked, Spring, clamp } from "../core/anim";
-import { Bridge, IS_TAURI, onDragDrop, onEvent } from "../core/bridge";
+import {
+  Bridge, handleBridgeCall, IS_TAURI, onDragDrop, onEvent, reportBridgeFailure,
+} from "../core/bridge";
 import { capabilityRequestGeneration } from "../core/capability-guard.js";
 import { Motion } from "../core/motion";
 import {
@@ -119,7 +121,7 @@ export class Island {
       },
       openTerminal: () => {
         const cwd = State.focusTask?.sessionCwd ?? null;
-        void Bridge.openInVSCode(cwd);
+        this.runBridgeAction(Bridge.openInVSCode(cwd), "Could not open Visual Studio Code.");
       },
       // The ↗ button — same targets as openAgentTarget() on macOS.
       openTarget: () => {
@@ -133,44 +135,43 @@ export class Island {
           integration_notion: "https://notion.so",
           integration_calcom: "https://app.cal.com/bookings",
         };
-        if (task.id === "integration_claude") void Bridge.openInVSCode(task.sessionCwd ?? null);
-        else if (task.id === "integration_n8n") void Bridge.openN8n();
-        else if (urls[task.id]) void Bridge.openUrl(urls[task.id]);
+        if (task.id === "integration_claude") {
+          this.runBridgeAction(Bridge.openInVSCode(task.sessionCwd ?? null), "Could not open Visual Studio Code.");
+        } else if (task.id === "integration_n8n") {
+          this.runBridgeAction(Bridge.openN8n(), "Could not open n8n.");
+        } else if (urls[task.id]) {
+          this.runBridgeAction(Bridge.openUrl(urls[task.id]), "Could not open that integration.");
+        }
       },
       openUrl: (url) => {
-        if (url) void Bridge.openUrl(url);
+        if (url) this.runBridgeAction(Bridge.openUrl(url), "Could not open that link.");
       },
       decide: (d) => {
         const req = State.pendingApproval;
-        void Bridge.log(`decide ${d} req=${req?.requestId ?? "none"}`);
         if (!req) return;
-        Sound.play(d === "deny" ? "blip" : "approve");
-        void Bridge.approvalDecision(req.requestId, d);
-        State.pendingApproval = null;
-        this.setPinned(false);
-        State.updateTask("integration_claude", "working");
-        State.setPillBadge("integration_claude", null);
-        this.setView(State.defaultView());
+        void handleBridgeCall(Bridge.log(`decide ${d} req=${req.requestId}`), "approval decision log");
+        void this.decideApproval(req.requestId, d);
       },
       toggleSound: () => {
         State.settings.soundEnabled = !State.settings.soundEnabled;
         Sound.setEnabled(State.settings.soundEnabled);
-        void Bridge.saveSettings(State.settings);
+        this.runBridgeAction(Bridge.saveSettings(State.settings), "Could not save sound settings.");
         State.notify();
       },
       setVolume: (v) => {
         State.settings.soundVolume = v;
         Sound.setVolume(v);
-        void Bridge.saveSettings(State.settings);
+        this.runBridgeAction(Bridge.saveSettings(State.settings), "Could not save sound settings.");
         State.notify();
       },
       setAutoClose: (s) => {
         State.settings.autoCloseInterval = s;
         this.fsm.homeToPetitDelay = s;
-        void Bridge.saveSettings(State.settings);
+        this.runBridgeAction(Bridge.saveSettings(State.settings), "Could not save island settings.");
         State.notify();
       },
-      openSettingsWindow: () => void Bridge.openSettingsWindow(),
+      openSettingsWindow: () => this.runBridgeAction(Bridge.openSettingsWindow(), "Could not open Settings."),
+      runBridgeAction: (operation, message) => this.runBridgeAction(operation, message),
       blip: () => Sound.play("blip"),
     };
 
@@ -273,7 +274,7 @@ export class Island {
         this.views.get("prompt")?.el.querySelector<HTMLInputElement>("input.chat-input")?.blur();
         this.syncInteraction();
       }
-      void Bridge.focusWindow(false);
+      void handleBridgeCall(Bridge.focusWindow(false), "window focus");
     }
     if (mode !== "expanded") {
       this.engine.resetMorph();
@@ -341,6 +342,44 @@ export class Island {
     this.expand(view);
   }
 
+  /** Run a user action through the typed bridge and show the existing note view on failure. */
+  runBridgeAction<T>(operation: Promise<T>, message: string) {
+    void handleBridgeCall(operation, "island action", () => this.showBridgeFailure(message));
+  }
+
+  showBridgeFailure(message: string) {
+    State.noteMessage = message;
+    if (State.pendingApproval) {
+      State.notify();
+      return;
+    }
+    this.alert("note");
+  }
+
+  private async decideApproval(requestId: string, decision: "allow" | "deny") {
+    try {
+      await Bridge.approvalDecision(requestId, decision);
+    } catch (error) {
+      reportBridgeFailure(error, "approval decision");
+      if (State.pendingApproval?.requestId === requestId) {
+        State.noteMessage = "Decision could not be confirmed. Check Claude Code before retrying.";
+        State.notify();
+      }
+      return;
+    }
+
+    // A timed-out request may have been replaced while the native command was
+    // pending. Never let the older reply clear the newer request's local card.
+    if (State.pendingApproval?.requestId !== requestId) return;
+    Sound.play(decision === "deny" ? "blip" : "approve");
+    State.pendingApproval = null;
+    State.noteMessage = null;
+    this.setPinned(false);
+    State.updateTask("integration_claude", "working");
+    State.setPillBadge("integration_claude", null);
+    this.setView(State.defaultView());
+  }
+
   reveal() {
     this.fsm.setPinned(State.isPinned || State.pendingApproval !== null);
     this.fsm.reveal();
@@ -375,7 +414,9 @@ export class Island {
 
   private onDragDrop(e: { type: string; paths?: string[] }) {
     if (!capabilityRequestGeneration(State.capabilities, "codex.attachmentDelivery")) return;
-    if (e.type !== "over") void Bridge.log(`drag ${e.type} ${e.paths?.length ?? 0} file(s)`);
+    if (e.type !== "over") {
+      void handleBridgeCall(Bridge.log(`drag ${e.type} ${e.paths?.length ?? 0} file(s)`), "drag log");
+    }
     if (e.type === "enter" || e.type === "over") this.beginFileDrag();
     if (e.type === "drop") this.endFileDrag();
     if (State.paused || State.pendingApproval) {
@@ -421,7 +462,7 @@ export class Island {
     if (this.fileDragActive) return;
     this.fileDragActive = true;
     this.dragGeneration++;
-    void Bridge.setFileDragActive(true);
+    void handleBridgeCall(Bridge.setFileDragActive(true), "file drag activation");
     this.syncInteraction();
   }
 
@@ -429,7 +470,7 @@ export class Island {
     if (!this.fileDragActive) return;
     this.fileDragActive = false;
     this.dragGeneration++;
-    void Bridge.setFileDragActive(false);
+    void handleBridgeCall(Bridge.setFileDragActive(false), "file drag deactivation");
     this.syncInteraction();
   }
 
@@ -461,7 +502,7 @@ export class Island {
       document.activeElement === input;
     if (typing !== this.textFocusActive) {
       this.textFocusActive = typing;
-      void Bridge.focusWindow(typing);
+      void handleBridgeCall(Bridge.focusWindow(typing), "window focus");
     }
     const active = typing || this.fileDragActive;
     if (active === this.interactionActive) return;
@@ -592,7 +633,7 @@ export class Island {
     const p = this.pushedRect;
     if (Math.abs(p.x - rect.x) > 0.5 || Math.abs(p.w - rect.w) > 0.5 || Math.abs(p.h - rect.h) > 0.5) {
       this.pushedRect = rect;
-      void Bridge.setIslandRect(rect.x, rect.y, rect.w, rect.h);
+      void handleBridgeCall(Bridge.setIslandRect(rect.x, rect.y, rect.w, rect.h), "island hit-test bounds");
     }
   }
 
@@ -617,12 +658,12 @@ export class Island {
         this.collapseTimer = null;
         if (State.mode !== "hidden") return;
         this.collapsed = true;
-        void Bridge.setCollapsed(true);
+        void handleBridgeCall(Bridge.setCollapsed(true), "window collapse");
       }, Motion.reducedMotion ? 0 : 420);
     } else if (this.collapsed) {
       // Grow the window back before the island animates open.
       this.collapsed = false;
-      void Bridge.setCollapsed(false);
+      void handleBridgeCall(Bridge.setCollapsed(false), "window expand");
     }
   }
 
@@ -639,7 +680,7 @@ export class Island {
       Sound.resume();
       State.lastActivity = performance.now();
       if (State.view === "prompt" && e.target instanceof Element && e.target.closest(".chat-input")) {
-        void Bridge.focusWindow(true);
+        void handleBridgeCall(Bridge.focusWindow(true), "window focus");
       }
       if (State.mode !== "expanded") {
         this.fsm.click();
@@ -660,7 +701,9 @@ export class Island {
     window.addEventListener("focusout", () => window.setTimeout(() => this.syncInteraction(), 0));
     window.addEventListener("blur", () => {
       this.syncInteraction();
-      if (State.view === "prompt") void Bridge.focusWindow(false);
+      if (State.view === "prompt") {
+        void handleBridgeCall(Bridge.focusWindow(false), "window focus");
+      }
     });
 
     void onDragDrop((e) => this.onDragDrop(e));
@@ -962,7 +1005,7 @@ export class Island {
     if (this.lastSyncedView !== State.view) {
       this.lastSyncedView = State.view;
       if (State.view === "prompt") {
-        void Bridge.focusWindow(true);
+        void handleBridgeCall(Bridge.focusWindow(true), "window focus");
         window.setTimeout(() => {
           if (State.view === "prompt" && document.hasFocus()) this.views.get("prompt")?.focus?.();
         }, 120);
