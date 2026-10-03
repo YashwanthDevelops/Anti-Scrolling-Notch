@@ -356,8 +356,8 @@ mod tests {
     use super::*;
     use crate::broker::reducer::{BrokerUpdate, SessionStatePatch};
     use crate::broker::types::{
-        ConnectionHealth, OpaqueId, SessionActivity, SessionLifecycle, WaitingState,
-        DOMAIN_SCHEMA_VERSION,
+        ConnectionHealth, DOMAIN_SCHEMA_VERSION, OpaqueId, RequestKind, RequestLifecycle,
+        SessionActivity, SessionLifecycle, SourceScopedId, WaitingState,
     };
 
     fn id(value: &str) -> OpaqueId {
@@ -385,6 +385,26 @@ mod tests {
             connection: ConnectionHealth::Unknown,
             started_at_unix_ms: None,
             last_seen_at_unix_ms: None,
+        }
+    }
+
+    fn pending_request(identity: &str) -> PendingRequest {
+        PendingRequest {
+            schema_version: SchemaVersion::current(),
+            identity: SourceScopedId::new(SourceKind::CodexCliObserver, id(identity)),
+            session_id: Some(SourceScopedId::new(
+                SourceKind::CodexCliObserver,
+                id("session-1"),
+            )),
+            thread_id: Some(id("thread-1")),
+            turn_id: Some(id("turn-1")),
+            tool_item_id: Some(id("tool-1")),
+            agent_id: None,
+            kind: RequestKind::Approval,
+            requested_capability: Some(id("filesystem.write")),
+            lifecycle: RequestLifecycle::Pending,
+            created_at_unix_ms: Some(100),
+            deadline_unix_ms: Some(1_000),
         }
     }
 
@@ -427,6 +447,44 @@ mod tests {
         assert_eq!(snapshot["schemaVersion"], DOMAIN_SCHEMA_VERSION);
         assert_eq!(snapshot["sequence"], 1);
         assert_eq!(snapshot["sessions"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn terminal_request_update_replays_while_snapshots_omit_the_request() {
+        let mut stream = BrokerStream::default();
+        let pending = pending_request("request-1");
+        let identity = pending.identity.clone();
+        let inserted = stream
+            .apply(BrokerUpdate::UpsertPendingRequest(pending.clone()), 100)
+            .unwrap();
+        assert_eq!(inserted.sequence, 1);
+        assert_eq!(stream.snapshot().pending_requests, vec![pending.clone()]);
+
+        let mut resolved = pending;
+        resolved.lifecycle = RequestLifecycle::Resolved;
+        let removed = stream
+            .apply(BrokerUpdate::UpsertPendingRequest(resolved), 110)
+            .unwrap();
+        assert_eq!(removed.outcome, ApplyOutcome::Changed);
+        assert_eq!(removed.sequence, 2);
+        assert!(stream.snapshot().pending_requests.is_empty());
+        assert!(stream.state().pending_request(&identity).is_none());
+
+        let BrokerSyncResponse::Replay {
+            after_sequence,
+            through_sequence,
+            events,
+        } = stream.synchronize_after(1)
+        else {
+            panic!("the terminal update should be retained for replay");
+        };
+        assert_eq!(after_sequence, 1);
+        assert_eq!(through_sequence, 2);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].sequence.get(), 2);
+        let event = serde_json::to_value(&events[0]).unwrap();
+        assert_eq!(event["payload"]["kind"], "upsert_pending_request");
+        assert_eq!(event["payload"]["value"]["lifecycle"], "resolved");
     }
 
     #[test]

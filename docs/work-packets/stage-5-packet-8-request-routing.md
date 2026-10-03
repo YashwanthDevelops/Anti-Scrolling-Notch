@@ -5,10 +5,10 @@
 | Packet | Stage 5, packet 8: CORE-07 request routing |
 | Release profile | Monitor MVP routing contract only |
 | Task IDs | CORE-07 only |
-| Branch / PR | `work/stage-5-core-07-request-routing` / pending |
+| Branch / PR | `work/stage-5-core-07-request-routing` / [PR #23](https://github.com/YashwanthDevelops/Anti-Scrolling-Notch/pull/23), merged |
 | Dependencies | Integrated CORE-01 domain types, CORE-02 reducer, CORE-03 stream, CORE-04 storage, and the backend capability registry; no verified Codex request adapter exists |
 | User outcome | A validated request has an exact backend route, can be acknowledged only after presentation, and can receive at most one bounded reply reservation before its explicit deadline |
-| Status | Locally validated; publication pending |
+| Status | Merged; contract integrated |
 
 ## In scope
 
@@ -52,4 +52,4 @@ The accepted Codex observer continues to transport only its versioned two-field 
 
 The backend router is implemented in `windows/src-tauri/src/broker/request_router.rs`. It exposes exact request and correlation IDs through the route key, rejects conflicting reuse across all stored scope fields, binds acknowledgement to the current presentation token, requires a live explicit deadline and the current capability snapshot, and reserves a bounded single-use decision attempt. Every completion outcome is terminal for that in-process route. It has no producer or transport and does not change runtime capability enablement.
 
-Validation passed: all 12 request-router tests; `cargo test --workspace --locked` (92 passed, 2 installed-app tests ignored); `cargo clippy --workspace --all-targets --locked`; scoped rustfmt on `broker/mod.rs` and `broker/request_router.rs`; `docs/check-markdown.ps1`; and `git diff --check`. Clippy reports the pre-existing `src-tauri/src/hooks.rs:467` `needless_range_loop` warning. Workspace-wide `cargo fmt --all -- --check` reports pre-existing formatting drift in untouched Rust code and unchanged regions of `capabilities.rs`; those files were not reformatted to avoid unrelated changes. No frontend/resource check was needed because those inputs are unchanged. Windows CI and PR checks remain pending publication.
+Validation passed: all 12 request-router tests; `cargo test --workspace --locked` (92 passed, 2 installed-app tests ignored); `cargo clippy --workspace --all-targets --locked`; scoped rustfmt on `broker/mod.rs` and `broker/request_router.rs`; `docs/check-markdown.ps1`; and `git diff --check`. Clippy reports the pre-existing `src-tauri/src/hooks.rs:467` `needless_range_loop` warning. Workspace-wide `cargo fmt --all -- --check` reports pre-existing formatting drift in untouched Rust code and unchanged regions of `capabilities.rs`; those files were not reformatted to avoid unrelated changes. No frontend/resource check was needed because those inputs are unchanged. PR #23 passed Windows CI run 56 and Build run 65 on head `5e828dd7fb40309528e2962511c0d1f36e44132f` and was merged at `9581fc9d4edfa6e4317962369e1be6cb0cdae99b`. The runtime request and external exactly-once limitations remain unchanged.
