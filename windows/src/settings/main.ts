@@ -3,7 +3,10 @@
 // integrations land here too in a later stage.
 
 import "./settings.css";
-import { Bridge, onEvent, type HookStatus, type MonitorOption, type ToggleShortcutStatus } from "../core/bridge";
+import {
+  Bridge, onEvent, reportBridgeFailure, safeBridgeFailure,
+  type HookStatus, type MonitorOption, type ToggleShortcutStatus,
+} from "../core/bridge";
 import { Motion } from "../core/motion";
 import { DEFAULT_SETTINGS, type Settings } from "../core/state";
 import { h, clear } from "../views/dom";
@@ -14,10 +17,29 @@ let monitors: MonitorOption[] = [];
 let shortcutStatus: ToggleShortcutStatus = { active: null, error: null };
 
 const root = document.getElementById("settings-root")!;
+const pageNotice = h("div", { class: "notice", hidden: true });
+
+function showPageNotice(message: string, kind: "warn" | "err" = "err") {
+  pageNotice.className = `notice ${kind}`;
+  pageNotice.textContent = message;
+  pageNotice.hidden = false;
+}
+
+function clearPageNotice(message?: string) {
+  if (message && pageNotice.textContent !== message) return;
+  pageNotice.textContent = "";
+  pageNotice.hidden = true;
+}
 
 async function save() {
-  await Bridge.saveSettings(settings);
-  Motion.setReducedMotion(settings.reducedMotion);
+  try {
+    await Bridge.saveSettings(settings);
+    Motion.setReducedMotion(settings.reducedMotion);
+    clearPageNotice("Preferences could not be saved. This change may not persist.");
+  } catch (error) {
+    reportBridgeFailure(error, "settings save");
+    showPageNotice("Preferences could not be saved. This change may not persist.");
+  }
 }
 
 // ── Reusable bits ─────────────────────────────────────────────────────────────
@@ -32,8 +54,9 @@ function toggle(on: boolean, onChange: (v: boolean) => void): HTMLElement {
   return el;
 }
 
-function statusDot(ok: boolean): HTMLElement {
-  return h("i", { class: "dot", style: `background:${ok ? "#22c55e" : "#f4505e"}` });
+function statusDot(ok: boolean | null): HTMLElement {
+  const color = ok === null ? "#f5a524" : ok ? "#22c55e" : "#f4505e";
+  return h("i", { class: "dot", style: `background:${color}` });
 }
 
 function renderDiff(text: string): HTMLElement {
@@ -47,18 +70,31 @@ function renderDiff(text: string): HTMLElement {
 
 // ── Claude Code section ───────────────────────────────────────────────────────
 
-function claudeSection(status: HookStatus): HTMLElement {
+function claudeSection(initialStatus: HookStatus | null): HTMLElement {
+  let status = initialStatus;
   const body = h("div", { style: "display:flex;flex-direction:column;gap:12px" });
   const section = h(
     "section",
     {},
-    h("h2", {}, statusDot(status.installed), h("span", { text: "Claude Code" })),
+    h("h2", {}, statusDot(status?.installed ?? null), h("span", { text: "Claude Code" })),
     body,
   );
 
   const rebuild = async () => {
-    const fresh = await Bridge.hooksStatus();
-    if (fresh) Object.assign(status, fresh);
+    let fresh: HookStatus | null;
+    try {
+      fresh = await Bridge.hooksStatus();
+    } catch (error) {
+      reportBridgeFailure(error, "hook status refresh");
+      showPageNotice("Hook status could not be refreshed; the last known status is shown.", "warn");
+      return;
+    }
+    if (!fresh) {
+      showPageNotice("Hook status is unavailable in this preview.", "warn");
+      return;
+    }
+    clearPageNotice("Hook status could not be refreshed; the last known status is shown.");
+    status = fresh;
     clear(body);
     draw();
     const head = section.querySelector("h2")!;
@@ -67,6 +103,13 @@ function claudeSection(status: HookStatus): HTMLElement {
   };
 
   function draw() {
+    if (!status) {
+      body.append(
+        h("div", { class: "hint", text: "Hook status could not be loaded. Reopen Settings to try again." }),
+        h("div", { class: "row" }, h("label", { text: "Hooks" }), statusDot(null)),
+      );
+      return;
+    }
     body.append(
       h("div", {
         class: "hint",
@@ -123,8 +166,9 @@ function claudeSection(status: HookStatus): HTMLElement {
       // An unreadable or invalid settings.json stops here rather than being
       // treated as empty and written over.
       clear(body);
+      reportBridgeFailure(err, "hook preview");
       body.append(
-        h("div", { class: "notice err", text: String(err).replace(/^Error:\s*/, "") }),
+        h("div", { class: "notice err", text: safeBridgeFailure(err, "Could not load the hook changes.") }),
         h("div", { class: "row" }, h("button", {
           text: "Back",
           onclick: () => { clear(body); draw(); },
@@ -161,8 +205,9 @@ function claudeSection(status: HookStatus): HTMLElement {
         }));
         window.setTimeout(() => void rebuild(), 2600);
       } catch (err) {
+        reportBridgeFailure(err, "hook update");
         confirm.disabled = false;
-        body.append(h("div", { class: "notice err", text: `Could not write: ${String(err)}` }));
+        body.append(h("div", { class: "notice err", text: `Could not write: ${safeBridgeFailure(err, "the hook settings")}` }));
       }
     });
     body.append(h("div", { class: "row" }, confirm, h("button", {
@@ -183,13 +228,19 @@ const MODELS: [string, string][] = [
   ["claude-haiku-4-5", "Claude Haiku 4.5"],
 ];
 
-function apiSection(hasKey: boolean): HTMLElement {
-  const dot = statusDot(hasKey);
-  const state = h("span", { class: "hint", text: hasKey ? "Key saved in the Windows Credential Manager." : "No key yet — the chat needs one." });
+function apiSection(hasKey: boolean | null): HTMLElement {
+  let keyPresent = hasKey;
+  const dot = statusDot(keyPresent);
+  const state = h("span", {
+    class: "hint",
+    text: keyPresent === null
+      ? "Credential status unavailable."
+      : keyPresent ? "Key saved in the Windows Credential Manager." : "No key yet — the chat needs one.",
+  });
 
   const field = h("input", {
     type: "password",
-    placeholder: hasKey ? "••••••••••••  (stored)" : "sk-ant-...",
+    placeholder: keyPresent === true ? "••••••••••••  (stored)" : "sk-ant-...",
     style: "flex:1 1 auto;min-width:0",
     autocomplete: "off",
     spellcheck: "false",
@@ -198,15 +249,26 @@ function apiSection(hasKey: boolean): HTMLElement {
   const saveBtn = h("button", { class: "primary", text: "Save key" });
   const clearBtn = h("button", { class: "danger", text: "Remove" });
   const feedback = h("div", {});
+  const renderStatus = () => {
+    dot.style.background = keyPresent === null ? "#f5a524" : keyPresent ? "#22c55e" : "#f4505e";
+    state.textContent = keyPresent === null
+      ? "Credential status unavailable."
+      : keyPresent
+        ? "Key saved in the Windows Credential Manager."
+        : "No key yet — the chat needs one.";
+    field.placeholder = keyPresent === true ? "••••••••••••  (stored)" : "sk-ant-...";
+    clearBtn.style.display = keyPresent === true ? "" : "none";
+  };
 
   async function refresh() {
-    const present = (await Bridge.secretPresent("anthropic-api-key")) ?? false;
-    dot.style.background = present ? "#22c55e" : "#f4505e";
-    state.textContent = present
-      ? "Key saved in the Windows Credential Manager."
-      : "No key yet — the chat needs one.";
-    field.placeholder = present ? "••••••••••••  (stored)" : "sk-ant-...";
-    clearBtn.style.display = present ? "" : "none";
+    try {
+      const present = await Bridge.secretPresent("anthropic-api-key");
+      if (present !== null) keyPresent = present;
+    } catch (error) {
+      reportBridgeFailure(error, "chat credential status");
+      showPageNotice("Credential status could not be checked; the last confirmed value is shown when available.", "warn");
+    }
+    renderStatus();
   }
 
   saveBtn.addEventListener("click", async () => {
@@ -215,11 +277,14 @@ function apiSection(hasKey: boolean): HTMLElement {
     clear(feedback);
     try {
       await Bridge.secretSet("anthropic-api-key", value);
+      keyPresent = true;
+      renderStatus();
       field.value = "";
       feedback.append(h("div", { class: "notice ok", text: "Saved. It never touches disk." }));
       await refresh();
     } catch (err) {
-      feedback.append(h("div", { class: "notice err", text: `Could not save: ${String(err)}` }));
+      reportBridgeFailure(err, "chat credential save");
+      feedback.append(h("div", { class: "notice err", text: `Could not save: ${safeBridgeFailure(err, "the key")}` }));
     }
   });
 
@@ -227,10 +292,13 @@ function apiSection(hasKey: boolean): HTMLElement {
     clear(feedback);
     try {
       await Bridge.secretClear("anthropic-api-key");
+      keyPresent = false;
+      renderStatus();
       feedback.append(h("div", { class: "notice ok", text: "Key removed." }));
       await refresh();
     } catch (err) {
-      feedback.append(h("div", { class: "notice err", text: `Could not remove: ${String(err)}` }));
+      reportBridgeFailure(err, "chat credential removal");
+      feedback.append(h("div", { class: "notice err", text: `Could not remove: ${safeBridgeFailure(err, "the key")}` }));
     }
   });
 
@@ -245,7 +313,7 @@ function apiSection(hasKey: boolean): HTMLElement {
     void save();
   });
 
-  clearBtn.style.display = hasKey ? "" : "none";
+  renderStatus();
 
   return h(
     "section",
@@ -290,7 +358,7 @@ const INTEGRATIONS: IntegrationDef[] = [
 
 const MAX_ACTIVE = 4;
 
-function integrationsSection(present: Record<string, boolean>): HTMLElement {
+function integrationsSection(present: Record<string, boolean | null>): HTMLElement {
   const note = h("div", { class: "hint" });
   const list = h("div", { style: "display:flex;flex-direction:column;gap:14px" });
 
@@ -325,7 +393,7 @@ function integrationsSection(present: Record<string, boolean>): HTMLElement {
         style: "flex:1 1 auto;min-width:0",
       }) as HTMLInputElement;
       const saveBtn = h("button", { text: "Save" });
-      const dotEl = statusDot(present[field.key] ?? false);
+      const dotEl = statusDot(present[field.key] ?? null);
       saveBtn.addEventListener("click", async () => {
         const value = input.value.trim();
         try {
@@ -334,8 +402,11 @@ function integrationsSection(present: Record<string, boolean>): HTMLElement {
           input.value = "";
           input.placeholder = value ? "••••••••  (stored)" : field.placeholder;
           dotEl.style.background = value ? "#22c55e" : "#f4505e";
-        } catch {
-          dotEl.style.background = "#f5a524";
+        } catch (error) {
+          reportBridgeFailure(error, "integration credential save");
+          const lastKnown = present[field.key] ?? null;
+          dotEl.style.background = lastKnown === null ? "#f5a524" : lastKnown ? "#22c55e" : "#f4505e";
+          showPageNotice(`Integration credential save could not be confirmed: ${safeBridgeFailure(error, "check the status before relying on it.")}`);
         }
       });
       rows.append(
@@ -414,12 +485,19 @@ function generalSection(): HTMLElement {
     void save();
   });
 
-  void onEvent<null>("screen-changed", async () => {
-    const available = await Bridge.monitorOptions();
-    if (available) {
-      monitors = available;
-      refreshScreenOptions();
-    }
+  void onEvent<null>("screen-changed", () => {
+    void (async () => {
+      try {
+        const available = await Bridge.monitorOptions();
+        if (available) {
+          monitors = available;
+          refreshScreenOptions();
+        }
+      } catch (error) {
+        reportBridgeFailure(error, "monitor option refresh");
+        showPageNotice("Display options could not be refreshed; the saved selection is unchanged.", "warn");
+      }
+    })();
   });
 
   const edgeOffset = h("input", {
@@ -465,7 +543,8 @@ function generalSection(): HTMLElement {
       shortcut.value = settings.toggleShortcut;
     } catch (err) {
       const fallback = previous ? ` ${previous} remains active.` : " No global shortcut is active.";
-      shortcutStatus.error = `${String(err).replace(/^Error:\s*/, "")}${fallback}`;
+      reportBridgeFailure(err, "toggle shortcut");
+      shortcutStatus.error = `${safeBridgeFailure(err, "Could not update the shortcut.")}${fallback}`;
     } finally {
       updateShortcutFeedback();
       applyShortcut.disabled = false;
@@ -521,7 +600,14 @@ function generalSection(): HTMLElement {
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
 async function main() {
-  const boot = await Bridge.boot();
+  let readFailure = false;
+  let boot: Awaited<ReturnType<typeof Bridge.boot>> = null;
+  try {
+    boot = await Bridge.boot();
+  } catch (error) {
+    readFailure = true;
+    reportBridgeFailure(error, "settings startup");
+  }
   if (boot) {
     settings = { ...settings, ...boot.settings };
     Motion.setReducedMotion(settings.reducedMotion);
@@ -529,22 +615,41 @@ async function main() {
     monitors = boot.monitors;
     shortcutStatus = boot.shortcutStatus;
   }
-  const status = (await Bridge.hooksStatus()) ?? {
-    installed: false, settingsPath: "", hookPath: "", hookReady: false,
-  };
+  let status: HookStatus | null = null;
+  try {
+    status = await Bridge.hooksStatus();
+  } catch (error) {
+    readFailure = true;
+    reportBridgeFailure(error, "hook status startup");
+  }
 
-  const hasKey = (await Bridge.secretPresent("anthropic-api-key")) ?? false;
+  let hasKey: boolean | null = null;
+  try {
+    hasKey = await Bridge.secretPresent("anthropic-api-key");
+  } catch (error) {
+    readFailure = true;
+    reportBridgeFailure(error, "chat credential startup status");
+  }
 
   const keys = [
     "stripe-api-key", "github-token", "vercel-token",
     "n8n-url", "n8n-api-key", "resend-api-key", "notion-api-key", "calcom-api-key",
   ];
-  const present: Record<string, boolean> = {};
-  for (const k of keys) present[k] = (await Bridge.secretPresent(k)) ?? false;
+  const present: Record<string, boolean | null> = {};
+  for (const k of keys) {
+    try {
+      present[k] = await Bridge.secretPresent(k);
+    } catch (error) {
+      readFailure = true;
+      present[k] = null;
+      reportBridgeFailure(error, "integration credential startup status");
+    }
+  }
 
   clear(root);
   root.append(
     h("h1", {}, h("span", { text: "Anti-Scrolling-Notch" }), h("span", { class: "version", text: version })),
+    pageNotice,
     claudeSection(status),
     apiSection(hasKey),
     integrationsSection(present),
@@ -554,6 +659,9 @@ async function main() {
       text: "No telemetry. Network requests only go to the services you configure yourself.",
     }),
   );
+  if (readFailure) {
+    showPageNotice("Some settings or credential status could not be loaded. Affected indicators are marked unavailable.", "warn");
+  }
 
   void onEvent<Settings>("settings-changed", (s) => {
     settings = { ...settings, ...s };

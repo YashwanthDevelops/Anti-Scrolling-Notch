@@ -3,7 +3,7 @@
 // Difference from macOS: no terminal filter. On Windows the hook fires from any
 // terminal (Windows Terminal, VS Code, PowerShell…) and all of them are handled.
 
-import { Bridge, onEvent } from "../core/bridge";
+import { Bridge, handleBridgeCall, onEvent } from "../core/bridge";
 import { Sound } from "../core/sound";
 import { State } from "../core/state";
 import type { Island } from "./island";
@@ -134,7 +134,9 @@ function handleHook(island: Island, payload: HookPayload) {
     // Silence here used to cost Claude Code nearly two minutes: the relay waited
     // for a decision from an island that had already decided not to look. Say so,
     // and the terminal takes the question immediately.
-    if (payload.request_id) void Bridge.approvalDecline(payload.request_id);
+    if (payload.request_id) {
+      void handleBridgeCall(Bridge.approvalDecline(payload.request_id), "paused approval decline");
+    }
     return;
   }
 
@@ -246,7 +248,9 @@ function handleHook(island: Island, payload: HookPayload) {
       // — that would leave a human staring at request B while request A waits for
       // a decision nobody can give. Hand it straight back to the terminal.
       if (State.pendingApproval && State.pendingApproval.requestId !== requestId) {
-        if (requestId) void Bridge.approvalDecline(requestId);
+        if (requestId) {
+          void handleBridgeCall(Bridge.approvalDecline(requestId), "concurrent approval decline");
+        }
         break;
       }
       upsert(projectName, cwd);
@@ -259,9 +263,12 @@ function handleHook(island: Island, payload: HookPayload) {
         tool,
         command: approvalTarget(tool, input),
       };
+      State.noteMessage = null;
       // The relay's short ack window closes in 800 ms; everything below this
       // line is synchronous, so the card really is up by the time it lands.
-      if (requestId) void Bridge.approvalAck(requestId);
+      if (requestId) {
+        void handleBridgeCall(Bridge.approvalAck(requestId), "approval acknowledgement");
+      }
       State.updateTask(CLAUDE_ID, "approval");
       island.setPinned(true);
       Sound.play("approval");
@@ -280,6 +287,7 @@ function handleHook(island: Island, payload: HookPayload) {
         pendingTimeout = null;
         if (!State.pendingApproval) return;
         State.pendingApproval = null;
+        State.noteMessage = null;
         island.dropPin();
         State.updateTask(CLAUDE_ID, "working");
         State.setPillBadge(CLAUDE_ID, null);

@@ -1,7 +1,7 @@
 // Entry point: boot the bridge, wire the island, start the greeting.
 
 import "./style.css";
-import { Bridge, IS_TAURI, onEvent } from "./core/bridge";
+import { Bridge, handleBridgeCall, IS_TAURI, onEvent, reportBridgeFailure } from "./core/bridge";
 import { BrokerView } from "./core/view-store";
 import { Sound } from "./core/sound";
 import { State, type Settings } from "./core/state";
@@ -17,7 +17,14 @@ async function main() {
 
   const island = new Island(root);
 
-  const boot = await Bridge.boot();
+  let boot: Awaited<ReturnType<typeof Bridge.boot>> = null;
+  let bootFailed = false;
+  try {
+    boot = await Bridge.boot();
+  } catch (error) {
+    bootFailed = true;
+    reportBridgeFailure(error, "application startup settings");
+  }
   if (boot) {
     State.settings = { ...State.settings, ...boot.settings };
     State.capabilities = boot.capabilities;
@@ -29,10 +36,26 @@ async function main() {
   await onEvent<{ x: number; y: number }>("cursor", ({ x, y }) => island.onCursor(x, y));
 
   /** Pause has to reach Rust too, or the pollers keep calling out. */
+  let confirmedPaused = State.paused;
+  let pauseIntent = 0;
+  let pauseQueue = Promise.resolve();
   const setPaused = (on: boolean) => {
     if (State.paused === on) return;
     State.paused = on;
-    void Bridge.setPaused(on);
+    const intent = ++pauseIntent;
+    pauseQueue = pauseQueue.then(async () => {
+      try {
+        await Bridge.setPaused(on);
+        confirmedPaused = on;
+      } catch (error) {
+        reportBridgeFailure(error, "tray pause control");
+        if (intent === pauseIntent) {
+          State.paused = confirmedPaused;
+          State.notify();
+          island.showBridgeFailure("Could not change the integration pause state.");
+        }
+      }
+    });
   };
 
   await onEvent<string>("tray", (what) => {
@@ -62,7 +85,9 @@ async function main() {
     island.fsm.toggle();
   });
 
-  await onEvent<null>("screen-changed", () => void Bridge.reposition());
+  await onEvent<null>("screen-changed", () => {
+    void handleBridgeCall(Bridge.reposition(), "screen reposition");
+  });
 
   // The settings window writes preferences; apply them here without a restart.
   await onEvent<Settings>("settings-changed", (s) => {
@@ -73,9 +98,12 @@ async function main() {
   });
 
   registerHookHandlers(island);
-  registerIntegrationHandlers(island);
+  registerIntegrationHandlers(island, boot !== null);
 
   island.launch();
+  if (bootFailed) {
+    island.showBridgeFailure("Could not load Anti-Scrolling-Notch settings. Some status may be unavailable.");
+  }
 
   // In a plain browser there is no wake strip behind the cursor: make the whole
   // page wake the island so the visuals can be checked with `npm run dev`.

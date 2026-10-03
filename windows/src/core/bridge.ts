@@ -204,6 +204,34 @@ export class BridgeCallError extends Error {
   }
 }
 
+/** Safe caller-side reporting for a native command failure. Never log its payload. */
+export function reportBridgeFailure(error: unknown, context: string): void {
+  const failure = error instanceof BridgeCallError
+    ? `${error.command}:${error.kind}`
+    : "unexpected_failure";
+  console.warn(`[Anti-Scrolling-Notch] ${context} failed (${failure})`);
+}
+
+/** Contain bridge rejections for background operations and optional UI actions. */
+export async function handleBridgeCall<T>(
+  operation: Promise<T>,
+  context: string,
+  onFailure?: () => void,
+): Promise<T | undefined> {
+  try {
+    return await operation;
+  } catch (error) {
+    reportBridgeFailure(error, context);
+    onFailure?.();
+    return undefined;
+  }
+}
+
+/** BridgeCallError contains only command and failure kind, so its message is safe to show. */
+export function safeBridgeFailure(error: unknown, fallback: string): string {
+  return error instanceof BridgeCallError ? error.message : fallback;
+}
+
 export type BridgeEvent =
   | { name: "broker-sync"; payload: BrokerSyncResponse }
   | { name: "cursor"; payload: { x: number; y: number } }
