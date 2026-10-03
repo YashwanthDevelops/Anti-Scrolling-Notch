@@ -5,7 +5,7 @@
 | Packet | Stage 5, packet 12: CORE-10 bridge-error contract slice |
 | Release profile | Monitor MVP reliability foundation |
 | Task IDs | CORE-10 — native bridge failure-contract sub-scope |
-| Branch / PR | `work/stage-5-core-10-legacy-bridge` / PR pending |
+| Branch / PR | `work/stage-5-core-10-legacy-bridge` / [PR #27](https://github.com/YashwanthDevelops/Anti-Scrolling-Notch/pull/27) |
 | Dependencies | CORE-03 and packet 11 integrated at `d213715dc83f3b90b6ca1c6b30b9e55da0b5fa67`; accepted four-event observer contract |
 | User outcome | A failed native command is distinguishable from an absent optional result, with a safe typed error callers can handle |
 | In scope | Common Tauri invocation path in `windows/src/core/bridge.ts`; stable `BridgeCallError` command/kind; focused bridge tests and CI; packet/plan/ledger status |
