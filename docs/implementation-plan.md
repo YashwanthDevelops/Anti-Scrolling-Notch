@@ -360,7 +360,7 @@ windows/
 Tasks:
 
 - [ ] **MON-01** Replace Claude-specific relay events, environment assumptions and labels with verified Codex inputs. Preserve tool-use IDs and parent/agent identities.
-- [ ] **MON-02** Implement a Codex hook installer with actual diff, backup, exact ownership, stale-preview fingerprint, safe write and owned-entry removal.
+- [x] **MON-02** Implement a Codex hook installer with actual diff, backup, exact ownership, stale-preview fingerprint, safe write and owned-entry removal.
 - [ ] **MON-03** Add onboarding: detect Codex → preview/install hooks → review/trust in Codex → run a test session → show actual event readiness.
 - [ ] **MON-04** Show configured/trusted/connected/last-event states separately; no green dot solely because a file or credential exists.
 - [ ] **MON-05** Render a real session selector with overflow, project/model/source labels, independent tickers and child-agent indicators. Optional integration pin count must not limit session monitoring.
