@@ -355,6 +355,8 @@ windows/
 
 ## Stage 6 — Replace Claude activity with reliable Codex monitoring
 
+**Owner-approved sequencing exception — 5 October 2026:** The project owner explicitly authorized beginning Stage 6 before closing the remaining source-dependent Stage 5 tasks. This changes execution order only; it does not mark Stage 5 complete or relax its acceptance criteria. Begin with the independent MON-02 Codex CLI hook-installer packet. Its installer is limited to the four runtime-captured CLI event names (`SessionStart`, `UserPromptSubmit`, `Stop`, `SessionEnd`). The accepted hook boundary still discards session/turn/tool/agent identifiers and other payload fields, so MON-01 identity preservation and session-aware monitoring remain unsupported and must stay disabled until a real verified input contract supplies them. Do not infer activity or complete CORE-05/06/07/08/10/11 from this exception.
+
 Tasks:
 
 - [ ] **MON-01** Replace Claude-specific relay events, environment assumptions and labels with verified Codex inputs. Preserve tool-use IDs and parent/agent identities.

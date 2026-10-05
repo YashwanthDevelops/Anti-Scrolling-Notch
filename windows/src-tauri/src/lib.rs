@@ -3,6 +3,7 @@
 pub mod broker;
 mod capabilities;
 mod claude;
+mod codex_hooks;
 mod codex_navigation;
 mod codex_pipe;
 mod files;
@@ -30,6 +31,7 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
+use codex_hooks::CodexHookStatus;
 use files::DroppedFile;
 use hooks::{HookPreview, HookStatus};
 use island::{PollGate, ScreenInfo};
@@ -415,6 +417,25 @@ fn hooks_apply(
     Ok(backup)
 }
 
+// ── Codex CLI hook configuration ─────────────────────────────────────────────
+
+#[tauri::command]
+fn codex_hooks_status() -> Result<CodexHookStatus, String> {
+    codex_hooks::status()
+}
+
+/// Returns the exact user-level hooks.json diff before any write occurs.
+#[tauri::command]
+fn codex_hooks_preview(install: bool) -> Result<HookPreview, String> {
+    codex_hooks::preview(install)
+}
+
+/// Applies or removes only the Codex observer entries shown by the preview.
+#[tauri::command]
+fn codex_hooks_apply(install: bool, fingerprint: String, backup: String) -> Result<String, String> {
+    codex_hooks::write(install, &fingerprint, &backup)
+}
+
 #[tauri::command]
 fn approval_decision(app: AppHandle, request_id: String, decision: String) {
     pipe::answer(&app, &request_id, &decision);
@@ -607,6 +628,9 @@ pub fn run() {
             hooks_status,
             hooks_preview,
             hooks_apply,
+            codex_hooks_status,
+            codex_hooks_preview,
+            codex_hooks_apply,
             approval_decision,
             approval_ack,
             approval_decline,
