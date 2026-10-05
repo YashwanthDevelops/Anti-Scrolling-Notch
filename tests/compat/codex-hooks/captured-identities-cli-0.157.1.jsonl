@@ -1,0 +1,4 @@
+{"sequence":1,"hook_event_name":"SessionStart","identities":{"session_id":"session:82dd70e639fd8dce"},"source":"startup","has_transcript_path":true,"has_cwd":true}
+{"sequence":2,"hook_event_name":"UserPromptSubmit","identities":{"turn_id":"turn:4dab42ff6cd56c9a","session_id":"session:82dd70e639fd8dce"},"has_prompt":true,"has_transcript_path":true,"has_cwd":true}
+{"sequence":3,"hook_event_name":"Stop","identities":{"turn_id":"turn:4dab42ff6cd56c9a","session_id":"session:82dd70e639fd8dce"},"has_transcript_path":true,"has_cwd":true,"has_last_assistant_message":true}
+{"sequence":4,"hook_event_name":"SessionEnd","identities":{"session_id":"session:82dd70e639fd8dce"},"reason":"other","has_transcript_path":true,"has_cwd":true}
