@@ -1,11 +1,9 @@
 // Settings window — the place where anything that writes to disk is confirmed.
-// Stage 2 covers the Claude Code hooks and the general preferences; API keys and
-// integrations land here too in a later stage.
 
 import "./settings.css";
 import {
   Bridge, onEvent, reportBridgeFailure, safeBridgeFailure,
-  type HookStatus, type MonitorOption, type ToggleShortcutStatus,
+  type CodexHookStatus, type HookStatus, type MonitorOption, type ToggleShortcutStatus,
 } from "../core/bridge";
 import { Motion } from "../core/motion";
 import { DEFAULT_SETTINGS, type Settings } from "../core/state";
@@ -208,6 +206,161 @@ function claudeSection(initialStatus: HookStatus | null): HTMLElement {
         reportBridgeFailure(err, "hook update");
         confirm.disabled = false;
         body.append(h("div", { class: "notice err", text: `Could not write: ${safeBridgeFailure(err, "the hook settings")}` }));
+      }
+    });
+    body.append(h("div", { class: "row" }, confirm, h("button", {
+      text: "Cancel",
+      onclick: () => { clear(body); draw(); },
+    })));
+  }
+
+  draw();
+  return section;
+}
+
+// ── Codex CLI hook configuration ────────────────────────────────────────────
+
+function codexHooksSection(initialStatus: CodexHookStatus | null): HTMLElement {
+  let status = initialStatus;
+  const body = h("div", { style: "display:flex;flex-direction:column;gap:12px" });
+  const section = h(
+    "section",
+    {},
+    h("h2", {}, h("span", { text: "Codex CLI hooks" })),
+    body,
+  );
+
+  const rebuild = async () => {
+    try {
+      status = await Bridge.codexHooksStatus();
+      clearPageNotice("Codex hook status could not be refreshed; the last known status is shown.");
+      clear(body);
+      draw();
+    } catch (error) {
+      reportBridgeFailure(error, "Codex hook status refresh");
+      showPageNotice("Codex hook status could not be refreshed; the last known status is shown.", "warn");
+    }
+  };
+
+  function draw() {
+    if (!status) {
+      body.append(
+        h("div", { class: "hint", text: "Codex hook status could not be loaded. Reopen Settings to try again." }),
+      );
+      return;
+    }
+
+    const configuredCount = status.configuredEvents.length;
+    const versionLine = status.cliSupported
+      ? `Supported CLI detected: ${status.cliVersion}`
+      : `Codex CLI ${status.supportedCliVersion} was not verified; installation is disabled.`;
+    body.append(
+      h("div", {
+        class: "hint",
+        text: "This configures only the four captured Codex CLI lifecycle hooks. The observer reads the event name and discards other hook fields; it does not control Codex.",
+      }),
+      h("div", { class: "row" },
+        h("label", { text: "CLI support" }),
+        h("span", { class: "path", text: versionLine }),
+      ),
+      h("div", { class: "row" },
+        h("label", { text: "Configured events" }),
+        h("span", { text: `${configuredCount}/4` }),
+      ),
+      h("div", { class: "row" },
+        h("label", { text: "hooks.json" }),
+        h("span", { class: "path", text: status.settingsPath }),
+      ),
+      h("div", { class: "row" },
+        h("label", { text: "Observer relay" }),
+        h("span", { class: "path", text: status.hookPath }),
+        h("span", { text: status.hookReady ? "Ready" : "Missing" }),
+      ),
+      h("div", {
+        class: "notice warn",
+        text: "After installing, review and trust this hook in Codex CLI with /hooks. A configured file does not mean the hook is trusted or that a session is connected.",
+      }),
+    );
+
+    const install = h("button", {
+      class: "primary",
+      text: configuredCount === 4 ? "Preview hook update…" : "Preview hook install…",
+      onclick: () => showPreview(true),
+    });
+    install.disabled = !status.cliSupported || !status.hookReady;
+    install.title = !status.cliSupported
+      ? `Only Codex CLI ${status.supportedCliVersion} is supported by the captured hook contract.`
+      : !status.hookReady ? "The observer relay is not installed yet." : "";
+    const actions = h("div", { class: "row" }, install);
+    if (configuredCount > 0) {
+      actions.append(h("button", {
+        class: "danger",
+        text: "Preview hook removal…",
+        onclick: () => showPreview(false),
+      }));
+    }
+    body.append(actions);
+  }
+
+  async function showPreview(install: boolean) {
+    let preview;
+    try {
+      preview = await Bridge.codexHooksPreview(install);
+    } catch (error) {
+      clear(body);
+      reportBridgeFailure(error, "Codex hook preview");
+      body.append(
+        h("div", { class: "notice err", text: safeBridgeFailure(error, "Could not load the Codex hook changes.") }),
+        h("div", { class: "row" }, h("button", {
+          text: "Back",
+          onclick: () => { clear(body); draw(); },
+        })),
+      );
+      return;
+    }
+    clear(body);
+    body.append(
+      h("div", {
+        class: "hint",
+        text: install
+          ? "Review this exact change to your user-level Codex hooks.json. Other hook handlers and settings are preserved."
+          : "This removes only Anti-Scrolling-Notch's exact observer command; other Codex handlers are preserved.",
+      }),
+      renderDiff(preview.diff),
+      h("div", { class: "row" }, h("span", {
+        class: preview.backup ? "path" : "hint",
+        text: preview.backup
+          ? `Backup → ${preview.backup}`
+          : "No backup will be created because hooks.json does not already exist or this preview makes no change.",
+      })),
+    );
+    const confirm = h("button", {
+      class: install ? "primary" : "danger",
+      text: install
+        ? preview.backup ? "Back up and write" : "Write hooks.json"
+        : preview.backup ? "Back up and remove" : "Remove hooks",
+    });
+    confirm.addEventListener("click", async () => {
+      confirm.disabled = true;
+      try {
+        const result = await Bridge.codexHooksApply(install, preview.fingerprint, preview.backup);
+        clear(body);
+        const successText = result.startsWith("No change;")
+          ? result
+          : result.startsWith("Created hooks.json.")
+            ? `${result} Open Codex CLI and use /hooks to review and trust this hook before it can run.`
+            : install
+              ? `Saved a backup at ${result}. Open Codex CLI and use /hooks to review and trust this hook before it can run.`
+              : `Saved a backup at ${result}. The owned observer hooks were removed.`;
+        body.append(h("div", {
+          class: "notice ok",
+          text: successText,
+        }));
+        window.setTimeout(() => void rebuild(), 2600);
+      } catch (error) {
+        reportBridgeFailure(error, "Codex hook update");
+        confirm.disabled = false;
+        body.append(h("div", { class: "notice err", text: `Could not write: ${safeBridgeFailure(error, "Codex hooks.json")}` }));
       }
     });
     body.append(h("div", { class: "row" }, confirm, h("button", {
@@ -623,6 +776,14 @@ async function main() {
     reportBridgeFailure(error, "hook status startup");
   }
 
+  let codexStatus: CodexHookStatus | null = null;
+  try {
+    codexStatus = await Bridge.codexHooksStatus();
+  } catch (error) {
+    readFailure = true;
+    reportBridgeFailure(error, "Codex hook status startup");
+  }
+
   let hasKey: boolean | null = null;
   try {
     hasKey = await Bridge.secretPresent("anthropic-api-key");
@@ -651,6 +812,7 @@ async function main() {
     h("h1", {}, h("span", { text: "Anti-Scrolling-Notch" }), h("span", { class: "version", text: version })),
     pageNotice,
     claudeSection(status),
+    codexHooksSection(codexStatus),
     apiSection(hasKey),
     integrationsSection(present),
     generalSection(),
