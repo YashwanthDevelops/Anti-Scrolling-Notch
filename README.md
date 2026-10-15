@@ -1,12 +1,12 @@
 # Anti-Scrolling-Notch
 
-A planned Windows companion for OpenAI Codex, inspired by Coucou's top-of-screen island workflow.
+A Windows companion for OpenAI Codex in development, inspired by Coucou's top-of-screen island workflow.
 
 Repository: [YashwanthDevelops/Anti-Scrolling-Notch](https://github.com/YashwanthDevelops/Anti-Scrolling-Notch).
 
 ## Current status
 
-The audited Coucou source and its Git history have been imported as the development baseline. The updated plan was published on 1 October 2026; the Windows build and Codex feature implementation are pending. The inherited application still implements Coucou/Claude behavior. This repository does not yet contain a completed Codex companion.
+As of 15 October 2026, the Windows baseline, retained UI/settings, substantial backend state/history/replay infrastructure, secure pipes and four-event Codex CLI hook installer are integrated. Session-aware monitoring remains incomplete: a partial runtime capture establishes some session/turn fields, while tool/subagent relationships remain unverified. GitHub workflow tracking, interactive Codex chat and release delivery are still ahead. See the [execution ledger](docs/execution-ledger.md) for evidence and limitations; this is not yet a completed Codex companion.
 
 ## Project documentation
 
@@ -19,7 +19,7 @@ The audited Coucou source and its Git history have been imported as the developm
 
 ## Implementation approach
 
-Use Coucou's existing Windows Tauri/Rust/TypeScript shell as the foundation and select inherited behaviors by their usefulness for Codex. Execute the master plan through one bounded stage/PR at a time.
+Use Coucou's existing Windows Tauri/Rust/TypeScript shell as the foundation and select inherited behaviors by their usefulness for Codex. Develop substantial working milestones across related stages on one branch, with targeted checks and one PR per milestone. The 15 October 2026 workflow replaces the former PR-per-packet cadence.
 
 Initially retain Coucou's existing UI, Coucou/Mochi visual assets, character animations, sounds, layout and interaction timing for development/prototyping while adapting the data and controls to Codex. Treat inherited assets as replaceable resources. A UI redesign is later work only if the user requests it. Use affected checks and reusable valid evidence during development; broader integration/package validation happens at the relevant boundaries and releases.
 
@@ -29,7 +29,9 @@ Production capabilities need verified supported-version behavior, tests, failure
 
 ## Development and publication
 
-The Windows project is in the windows directory. Read [AGENTS.md](AGENTS.md), the implementation plan and [stage packet template](docs/stage-packet-template.md) before working. The next packet is Stage 2 Windows baseline, not feature implementation. Make small verified commits and push each completed change to this repository. The upstream remote is used to fetch and review Coucou changes; its push URL is disabled in the development checkout.
+The Windows project is in the windows directory. Read [AGENTS.md](AGENTS.md), the [implementation plan](docs/implementation-plan.md) and [milestone template](docs/stage-packet-template.md) before working. Next is M1: connect verified Codex session data through the backend and UI, then complete the monitor's GitHub, history, notifications and recovery workflow. Continue independent work when a capability lacks evidence; keep that capability disabled until verified.
+
+Keep coherent local commits and batch pushes at a stable checkpoint or session end. Open a PR for a substantial working milestone; keep captures, documentation and fixes together. Run affected checks during development, combined checks at milestone readiness and full packaged QA at release candidates. Documentation-only maintenance can use a direct commit when repository protection permits. The upstream remote is used to fetch and review Coucou changes; its push URL is disabled in the development checkout.
 
 Inherited visuals/animations remain the development prototype's active appearance. Release scripts must have their destination/runtime identity reviewed, and assets must pass the explicit pre-distribution review. Do not publish unreviewed Coucou-branded installers or run an upstream-targeting release script for this product.
 

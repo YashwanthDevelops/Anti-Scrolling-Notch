@@ -1,8 +1,8 @@
 # Anti-Scrolling-Notch — Windows Codex implementation plan
 
-Updated 5 October 2026. This revision adopts the user's retained-Coucou-UI development direction, with asset review separated from prototyping. The audited source and planning baseline are committed; Windows baseline, compatibility work, Stage 4 through SHELL-07, and Stage 5 packets 1–15 are integrated. Stage 4 SHELL-08/09 and residual Stage 5 requirements remain open. See `docs/execution-ledger.md` for exact packet evidence and current status.
+Updated 15 October 2026. At the owner's request, development now uses larger working milestones, targeted validation and batched GitHub publication. This replaces the former one-packet/one-PR workflow and immediate push requirement. The Windows baseline, compatibility foundation, Stage 4 through SHELL-07, Stage 5 packets 1–15 and MON-02 hook installer are integrated. Stage 4 SHELL-08/09, residual Stage 5 requirements and session-aware monitoring remain open. The latest MON-01 capture is partial evidence, not a working monitor. See [the execution ledger](execution-ledger.md) for actual progress.
 
-Build from Coucou's existing Windows project. Use it as the implementation/reference foundation for Anti-Scrolling-Notch for Codex. Keep interactions that help Codex users, adapt their behavior to Codex, and remove or defer the rest. This master specification covers source import through maintenance; execute it through one bounded stage/PR at a time.
+Build from Coucou's existing Windows project. Use it as the implementation/reference foundation for Anti-Scrolling-Notch for Codex. Keep interactions that help Codex users, adapt their behavior to Codex, and remove or defer the rest. This master specification covers source import through maintenance; deliver working user outcomes across related stages on a shared milestone branch.
 
 The earlier [repository audit](coucou-analysis.md) defines 124 catalog entries and identifies working features versus placeholders. The [source inventory](coucou-source-inventory.md) lists all 215 audited files. Audited upstream commit: `3cc3333203f60f63326ee949b7b86c7549992a1f`.
 
@@ -15,9 +15,9 @@ The earlier [repository audit](coucou-analysis.md) defines 124 catalog entries a
 | Development checkout | `C:\Users\Yashwanth\Windows Notch\app`. Import the audited Coucou checkout here and retain its Git history. |
 | Reference checkout | Existing `.analysis\coucou`, kept separate from implementation. |
 | Git remotes | `origin` = your Anti-Scrolling-Notch repository; `upstream` = Coucou, used only to fetch/review changes. |
-| GitHub CLI | Optional. Git handles clone/commit/push; use GitHub's website or an available authenticated API for PRs/releases. `gh` was unavailable during this plan update. |
-| Delivery policy | Commit each coherent verified change, push every completed commit, and record actual progress/checks in the project ledger. |
-| Execution policy | One active stage packet and one active implementation PR at a time; review and integrate it before starting dependent work. |
+| GitHub CLI | Optional. Git handles clone/commit/push; use GitHub's website or an available authenticated API for milestone PRs/releases. |
+| Delivery policy | Keep coherent local checkpoint commits; batch pushes at a stable milestone or session end. Open one PR per substantial working milestone, not per task, fixture or documentation update. |
+| Execution policy | One active milestone branch may cover several related stages. Continue dependent work on that branch without intermediate PR/merge gates; update one milestone record in place. |
 | Agent policy | Agents may work on independent modules; the coordinating agent owns integration, staging, commits and pushes. |
 | Initial platform | Windows 11 x64; additional Windows/ARM64 support only after testing. |
 | App stack | Tauri 2, Rust, TypeScript/Vite, inherited Coucou/Mochi Canvas renderer and replaceable assets, WebView2. |
@@ -74,30 +74,51 @@ During the Stage 2 baseline run, capture a small reference set of compact/expand
 
 The project is complete only when Stages 11–12 acceptance criteria pass for the interactive v1 profile. A monitor MVP can be released earlier only after those same QA/delivery gates pass for its declared scope. Record deferred work separately; never check it off as implemented.
 
-## Execute one stage/PR at a time
+## Development workflow from 15 October 2026
 
-This document is the master plan, not a single autonomous implementation assignment. Before starting a stage, create a work packet using [the stage packet template](stage-packet-template.md). The packet names its release profile, task IDs, dependencies, allowed files/modules, explicit exclusions, acceptance evidence and fallback/recovery tests. Record it as active in the execution ledger.
+This owner-approved workflow supersedes older packet-size, sequencing, immediate-push and per-packet PR instructions, including sequencing restrictions in historical work packets. Keep their evidence and unresolved requirements; they no longer prevent starting related implementation or independent work. Existing consent, credential/privacy and runtime safety boundaries still apply. Task IDs and completion criteria remain the master checklist, rather than separate publication gates.
 
-Use one short branch and one bounded PR for that packet. A large stage may be split into sequential PRs, each with its own completed behavior and gate; do not start the next packet until the prior PR is reviewed, required checks pass and it is integrated. Independent agents may inspect/test or own non-overlapping parts of the current packet. They do not authorize additional stages or concurrent Git mutations.
+Use one feature branch for a substantial user outcome. Combine adapter, reducer, storage, bridge, UI and relevant recovery work on that branch until the workflow works end to end. Related stages may advance together; an intermediate commit does not need a PR, merge or another permission round before the next implementation step. Split a milestone only for a concrete independent delivery or a change too large to assess safely, not because a task ID or stage changed.
 
-The PR must link the packet and show behavior, failure/recovery results, automated checks and remaining limitations. A partially completed stage remains pending in the master plan even when one of its packets merges. Release QA and delivery repeat per profile instead of being postponed until every optional feature exists.
+Use [the existing template](stage-packet-template.md) once per milestone, or put the same concise scope and validation notes directly in the execution ledger. Update that record in place. Do not create separate planning, evidence-capture, activation, closeout or merge-record PRs. Keep small fixes and documentation with the owning milestone; a documentation-only correction may go directly to `main` if repository protection permits. Feature integration still uses a milestone PR with required hosted checks and a final diff review.
 
-## Validation policy — avoid redundant testing
+Make coherent local checkpoint commits as useful. Push the accumulated commits once at a stable checkpoint or session end; an interrupted session may push a clearly labelled incomplete checkpoint to its feature branch. Open the milestone PR when the working outcome is reviewable. Do not push merely to trigger CI, poll every unchanged CI result, or create an extra commit just to record the previous commit's hash. This change does not modify hosted workflow triggers or bypass required branch checks.
 
-Use the smallest meaningful checks for the change, then expand only at integration/release boundaries or when a failure creates a concrete concern. Measure test/build durations during Stage 2 and organize fast component checks separately from slower native/packaging checks. Do not promise zero debugging or trade truthful capability/recovery verification for speed.
+### Immediate priority — build a usable monitor
 
-| Change or boundary | Required validation | Avoid |
+Continue from the existing code; do not redo the baseline or completed packets. In M1, first connect the verified session/turn input slice through the broker, history, view store and island, then add readiness/onboarding and focused recovery. The current single-turn capture does not prove cross-session uniqueness, retries, tool identity or agent relationships: validate those separately before enabling their capabilities. Keep unsupported tool/subagent/control features disabled and show limitations truthfully; MON-01 stays partially complete until its full requirements pass.
+
+Implement independent local Git/worktree resolution, GitHub PR/current-head CI, deferred-control cleanup and notification policy while unavailable Codex evidence is being resolved. Their Stage 6 dependency is limited to actual session-binding needs; the repository resolver, scheduler and cards can be developed against their own real contracts. A blocked capability must not freeze unrelated work or lead to repeated documentation-only milestones. After an unsuccessful evidence probe, diagnose once, record the exact missing evidence and resume independent implementation. Retry only with changed inputs or a specific new hypothesis. Fixtures support development but do not enable production capabilities.
+
+### Remaining delivery milestones
+
+The default is four substantial milestone PRs from the current checkpoint, rather than a PR for each remaining task. These are delivery boundaries, not fixed dates or limits that prevent a necessary split. Keep the task-level status honest even when only part of a cross-profile task is included.
+
+| Milestone | Working outcome and included scope | Publication boundary |
 |---|---|---|
-| Documentation/planning | Local link/task/scope/whitespace checks | App rebuilds or Codex sessions solely for a prose edit |
-| UI/layout/motion | Affected frontend build/type checks and focused interaction/visual comparison; accessibility checks when behavior changes | Full Codex/GitHub/install matrices for an isolated visual change |
-| Reducer/storage/router | Relevant behavior/failure/replay/migration tests; dependent contract checks | Repeating unchanged manual UI tours |
-| Adapter/protocol/auth/IPC | Sanitized fixture tests and one real integration probe for the changed capability/version/surface | Repeated live-account calls when fixtures cover the unchanged contract |
-| Cross-module or dependency/config change | Affected component checks plus required integration/regression checks | Assuming a narrow unit pass proves an altered boundary |
-| Release candidate | Required automated regression and current packaged artifact's relevant Windows/install/update/uninstall smoke/matrix | Re-running an unchanged passing candidate without new evidence or changes |
+| M1 — Usable monitor MVP | Remaining MVP Stage 4/5 work, Stage 6, Stage 7 core and Stage 9A: real independent sessions, readiness, history/details, correct PR/CI, notifications and reload/restart recovery. Capture compatibility evidence within the same milestone. | One feature PR once the integrated monitor works and affected checks pass; internal checkpoints stay on its branch. Unsupported required behavior remains an explicit blocker to declaring the full MVP complete. |
+| M2 — Monitor beta delivery | MVP Stages 11–12 plus remaining SETUP-07: packaged Windows QA, release-cleared assets, signing, updater, install/upgrade/uninstall and accurate documentation. | One release-preparation PR; publish beta only after that profile's release gates pass. |
+| M3 — Interactive v1 | Interactive Stage 3 evidence, residual CORE tasks, Stage 8, Stage 9B, core Stage 10 attachments and v1 detail/review scope. Build managed chat, stream/control, real approvals/questions, attachments and recovery together. | One feature PR for the working interactive workflow; split only for a concrete review or delivery need. |
+| M4 — Completed core release | Repeat Stages 11–12 for interactive v1, including current-package QA, migrations, update/recovery and v1.0 delivery. | One release-preparation PR; publish v1.0 after its own gates pass. |
 
-Record evidence with commit/component input fingerprint, Codex/OS/dependency versions, command and result. Reuse a passing result only while its relevant code, dependency/config inputs and environment remain valid; do not relabel results from a different artifact/version as a fresh pass. Reuse valid unchanged-component evidence in a later release profile, while testing new capabilities, affected boundaries and the actual new package. Stages 11–12 still issue a distinct acceptance decision for every release.
+Optional integrations, voice, shared-desktop control, hosted webhooks and extra platforms stay deferred. A blocked external signing or asset prerequisite in M2 does not prevent independent M3 implementation once the monitor foundation is integrated; public delivery remains gated.
 
-After a failed check, inspect the error and change the responsible code/environment before rerunning. Do not repeatedly execute the same failing command with unchanged inputs; a suspected transient gets a bounded retry with a recorded reason. Once required checks pass, proceed to review/commit/push. Broaden or repeat only for new changes, failures, protocol/dependency updates, packaging changes or an unresolved risk. Never skip a repository-required check; Stage 2 should scope Windows CI by affected paths, cache dependencies and supersede outdated runs on the same PR without cancelling a release publication in progress.
+## Validation policy — fast feedback, milestone checks, release QA
+
+Develop in coherent batches. Run the smallest relevant check after a meaningful implementation slice or to diagnose a concrete problem, not after every edited file or commit. Add tests for new behavior and realistic failure/recovery risks; avoid tests that repeat implementation details or merely prove a documentation/cosmetic edit exists.
+
+| When | Required validation | Do not repeat |
+|---|---|---|
+| Documentation/planning change | Changed-document links, task/scope consistency and diff/whitespace check | Rust/frontend builds, runtime captures, installers or full suites |
+| Frontend implementation batch | Typecheck and affected frontend tests; focused interaction/accessibility check when behavior changes | Unchanged native suites, full UI tours or installer builds |
+| Rust implementation batch | Compile/check affected crate and focused behavior/failure tests; relevant replay/migration checks when changed | Full workspace, Clippy and optimized builds after every helper or commit |
+| Changed adapter/protocol/auth/IPC | Contract fixtures and affected denial/timeout/bounds tests; one successful real integration probe for the changed capability/version before enabling it | Live-account probes for unchanged contracts or retries without a new hypothesis |
+| Ready milestone / final PR head | One combined regression pass for affected boundaries, appropriate workspace/frontend checks and Clippy/build for changed native code, required hosted checks and one integrated user-flow smoke | An identical broad local pass after a docs-only follow-up, duplicated release/debug builds without need, or repeated unchanged CI polling |
+| Release candidate M2 / M4 | Stages 11–12: required regression plus actual packaged Windows behavior, accessibility/performance, install/update/uninstall, rights and signing checks for that profile | Packaging every development checkpoint or rerunning a passing unchanged candidate |
+
+Record commands, results and relevant commit/component inputs and runtime versions together in the milestone record. For normal focused checks, changed paths plus commit and tool versions are sufficient; do not create an evidence packet or manual fingerprint ceremony for each helper. Reuse passing results while relevant code, dependencies/config and environment are unchanged. A docs-only follow-up does not invalidate earlier code checks. New source/schema/dependency changes invalidate the affected evidence and require the corresponding rerun.
+
+Diagnose a failure before rerunning it. Allow one justified retry for a suspected transient; otherwise change the responsible inputs first. Once affected checks pass, continue implementation. Run broader regression at the milestone boundary and repeat only what later changes invalidate. Required repository/CI checks remain mandatory; native focus/DPI/notification/install behavior is verified at its affected milestone or release candidate, rather than after unrelated edits. Missing runtime evidence remains visible and cannot be reported as passed.
 
 ## Delivery map
 
@@ -109,16 +130,16 @@ After a failed check, inspect the error and change the responsible code/environm
 | 4 | Runtime identity, retained Coucou UI and replaceable asset boundary | 2 |
 | 5 | Authoritative broker, storage and request routing | 3, 4 |
 | 6 | Reliable monitoring of existing Codex sessions | 3, 5 |
-| 7 | Useful local Git and GitHub workflow cards | 5, 6 |
+| 7 | Useful local Git and GitHub workflow cards | 5; 6 only for live session binding |
 | 8 | Interactive companion-managed Codex sessions | 3, 5, 6 |
 | 9A | MVP notifications, observer health and recovery | 4–7; no dependency on 8 |
 | 9B | Managed-process/request health and recovery | 8, 9A |
 | 10 | Core attachments for v1; selected extensions separately | 5, 8 for attachments; extension-specific prerequisites |
-| 11 | Release candidate verified for the declared profile | All in-scope packets; MVP excludes 8, 9B and 10 |
+| 11 | Release candidate verified for the declared profile | All in-scope features; MVP excludes 8, 9B and 10 |
 | 12 | Signed installer, updater and release for that profile | 11 for the same profile |
 | 13 | Maintenance and supported-version policy | 12 |
 
-Stage 9 has two sequential scopes, not two new master stages. Stages 6–7 plus 9A produce the useful monitor; Stages 11–12 make it releasable. After that baseline is integrated, Stage 8, 9B and core Stage 10 build the interactive product, followed by another QA/release cycle. Optional modules are independently selected.
+Stage 9 has two scopes, not two new master stages. M1 combines Stages 6–7 and 9A with their remaining foundation work; M2 makes that monitor releasable. M3 combines Stage 8, 9B and core Stage 10, followed by M4 QA/release. Dependencies represent actual data/contract needs, not separate PR gates. Independent interactive work may continue if only external MVP publication prerequisites are blocked. Optional modules are independently selected.
 
 ```mermaid
 flowchart LR
@@ -128,13 +149,16 @@ flowchart LR
     C --> E[Broker and request router]
     D --> E
     E --> F[Existing-session monitor]
-    F --> G[GitHub workflow]
+    E --> G[GitHub workflow]
+    F --> I[9A: MVP notifications and recovery]
     G --> I[9A: MVP notifications and recovery]
-    I --> K[11 and 12: MVP QA and release]
-    K --> H[8: Managed Codex chat]
+    I --> M[M1: Integrated monitor]
+    M --> K[M2: MVP QA and release]
+    M --> H[8: Managed Codex chat]
     H --> N[9B: Managed process and request recovery]
     N --> J[10: Core attachments]
-    J --> L[11 and 12: Interactive v1 QA and release]
+    J --> V[M3: Integrated interactive v1]
+    V --> L[M4: Interactive v1 QA and release]
     L --> X[Selected extensions and separate release gates]
 ```
 
@@ -150,7 +174,7 @@ Tasks:
 - [x] **SETUP-02** Clone the audited Coucou source into the separate `app` directory; keep the analysis checkout intact and preserve source history.
 - [x] **SETUP-03** Configure `origin` as Anti-Scrolling-Notch and `upstream` as Coucou. Verify fetch/push URLs; never push to Coucou.
 - [x] **SETUP-04** Inspect the checked-out SHA. Compare it with the audited SHA and record any newer upstream changes before relying on this plan's source findings.
-- [x] **SETUP-05** Publish the initial source/planning baseline to `main`. Use `work/windows-baseline` for the first implementation packet; keep unfinished changes on short feature branches and use one reviewed stage PR at a time.
+- [x] **SETUP-05** Publish the initial source/planning baseline to `main`. Keep unfinished implementation on feature branches and integrate reviewed working milestones; the initial packet/PR history is retained in the ledger.
 - [x] **SETUP-06** Add the audit, updated plan, source provenance and execution ledger under your project's documentation; retain upstream license and asset-license files.
 - [ ] **SETUP-07** Review inherited Actions workflows and release scripts. Replace upstream repository references before enabling your own publishing workflow. Never push release tags to Coucou.
 - [x] **SETUP-08** Add the Anti-Scrolling-Notch README and coordinating-agent commit/push rules. Preserve the original Coucou README as reference. Keep build output, local logs, files and secrets ignored.
@@ -357,6 +381,8 @@ windows/
 
 **Owner-approved sequencing exception — 5 October 2026:** The project owner explicitly authorized beginning Stage 6 before closing the remaining source-dependent Stage 5 tasks. This changes execution order only; it does not mark Stage 5 complete or relax its acceptance criteria. Begin with the independent MON-02 Codex CLI hook-installer packet. Its installer is limited to the four runtime-captured CLI event names (`SessionStart`, `UserPromptSubmit`, `Stop`, `SessionEnd`). A later bounded CLI 0.157.1 capture observed `session_id` on those four events and a consistent `turn_id` on `UserPromptSubmit`/`Stop` within one turn, but the adapter still discards all fields except event names. The same probe exposed zero tools and delivered no tool-use or subagent events; it therefore did not verify tool-use identity or parent/agent relationships. MON-01 identity preservation and session-aware monitoring remain unsupported and disabled. See [the MON-01 evidence packet](work-packets/stage-6-packet-2-mon-01-identity-evidence.md) and its [bounded capture disposition](work-packets/stage-6-packet-3-mon-01-partial-capture.md) with sanitized fixture. Do not infer activity or complete CORE-05/06/07/08/10/11 from this exception.
 
+**Current sequencing — 15 October 2026:** MON-02 is integrated. Continue the verified portion of MON-01 together with MON-03/04 readiness, broker/view-store integration and the session/history slices of MON-05–08 under M1. Earlier packet exclusions no longer require stopping all implementation until every MON-01 identity is known. The full MON-01 and monitor acceptance criteria still apply; unverified fields/events and production capabilities stay disabled. Advance independent Stage 7/9A work when source evidence is unavailable.
+
 Tasks:
 
 - [ ] **MON-01** Replace Claude-specific relay events, environment assumptions and labels with verified Codex inputs. Preserve tool-use IDs and parent/agent identities.
@@ -515,50 +541,30 @@ Tasks:
 
 **Done when:** there is a documented ownership/support process and users can determine which release supports their Codex/Windows setup. This planning document does not create a scheduled automation.
 
-## Frequent commits, pushes and agent coordination
+## Checkpoint commits, batched pushes and milestone review
 
-Your instruction to commit and push frequently applies throughout implementation. Use the following rules:
+The 15 October 2026 owner instruction replaces the previous frequent-PR/immediate-push cadence:
 
-1. Start by inspecting branch, status and remotes; fetch `origin` before integrating remote work. Preserve unrelated user changes.
-2. Activate one bounded stage packet/PR, with declared profile/task IDs and exclusions, on a short branch such as `work/windows-baseline`, `feature/codex-monitor` or `feature/github-status`. Finish its review/gate before starting the next packet.
-3. Run checks relevant to the change. Documentation-only changes need consistency/link checks; code needs meaningful build/tests. Do not claim a build passed when it was not run.
-4. Update `docs/execution-ledger.md` with task IDs, completed/pending status, changed files, check results and remaining limitations. Record the completed commit hash in the next ledger update or externally verified milestone record; avoid a self-referential commit loop.
-5. Stage explicit files, inspect the diff, and make a descriptive commit. Push every completed commit immediately, and push remaining completed commits before ending a work session. Cadence follows useful verified changes, not arbitrary time-based empty commits.
-6. Keep a broken/incomplete checkpoint on its feature branch with clear WIP status; do not mark its acceptance gate complete. `main` contains reviewed milestones after the initial unmodified source import.
-7. Open PRs against **your** repository. Do not merge/publish a release until required checks and the authorized workflow permit it. GitHub CLI is optional.
-8. Verify the remote branch SHA after pushing. If authentication/network/rejection blocks a push, preserve the local commit and report the exact failure; never report it as uploaded.
-9. Never force-push protected/shared branches, rewrite unrelated history, upload credentials or accidentally push to `upstream`.
+1. Inspect status and remotes; fetch before integrating remote work. Preserve unrelated changes. Publication targets only `YashwanthDevelops/Anti-Scrolling-Notch`; `upstream` stays fetch-only.
+2. Use one milestone branch, such as `feature/monitor-mvp`, and one concise scope record covering related task IDs across stages. Continue related implementation on it without waiting for small PRs.
+3. Make useful local checkpoint commits after affected checks. Stage exact intended files and inspect the diff. An incomplete checkpoint is labelled as such and stays off `main`.
+4. Batch pushes at a stable checkpoint or session end. Do not push each commit immediately or solely to rerun CI. Preserve incomplete work on the feature branch when needed.
+5. Update one milestone ledger record with delivered behavior, changed areas, checks and blockers. Put captures, fixes and documentation in the owning milestone. No hash-only closeout commits or documentation-only PR chains.
+6. Open one PR when the substantial working outcome is ready. Review the complete diff and pass required hosted checks before integration. Split only for a concrete review/delivery need; branch protection still applies. Documentation-only maintenance may use a direct commit when allowed.
+7. Verify the remote branch SHA after each push. Preserve and report a rejected local commit; never force-push, reset unrelated work, or claim an upload succeeded without verification.
+8. Complete M1 through M4 as described above, reusing valid evidence and testing affected changes. Required releases still pass Stages 11–12 for their exact profile; task completion does not follow merely from a merged PR.
 
-Agent work is permitted by your instruction. Assign independent tasks with clear file/module ownership. Agents report their edits, tests and limitations to the coordinating agent. Only the coordinating agent stages, commits and pushes the shared checkout; use isolated worktrees for genuinely independent branch work and integrate before combined checks. Do not run competing Git mutations from several agents. Agent availability does not replace review or justify creating work without a useful independent subtask.
+Agents may own independent modules where useful, with explicit file ownership. Only the coordinator stages, commits and pushes the shared checkout. Use isolated worktrees for independent branch work and combine changes before milestone checks; no competing Git mutations. Delegation is optional and does not create additional PR gates.
 
-Recommended packet/PR order (split a stage further if its review would be too large; keep packets sequential):
-
-1. Stage 2: Windows baseline, development evidence and required Windows CI.
-2. Stage 3 MVP scope: observing/navigation/Windows probes and enforced capability registry.
-3. Stage 4: retained Coucou UI/assets, runtime identity and replaceable asset boundary, settings/basic history window and inherited-feature decisions.
-4. Stage 5: backend authority, model/reducer/replay/storage/request contracts.
-5. Stage 6: Codex relay, previewable hook installer and independent session monitoring.
-6. Stage 7 MVP scope: Git/worktree resolver and GitHub PR/CI scheduler/cards.
-7. Stage 9A: Windows notifications, observer/GitHub health and restart/reload recovery.
-8. Stage 11 MVP profile: automated checks and actual packaged Windows QA.
-9. Stage 12 MVP profile: signed installer/updater, clean-machine validation and monitor beta.
-10. Stage 3 interactive scope: managed-session and selected permission/input capability probes.
-11. Stage 8: managed App Server transport/auth/streaming, then real approval/question/control packets and detailed history; add selected Stage 7 review details separately.
-12. Stage 9B: owned-process/transport and request recovery.
-13. Stage 10 core: attachment staging/previews and supported Codex input delivery.
-14. Stage 11 interactive v1 profile: full in-scope QA and new release candidate.
-15. Stage 12 interactive v1 profile: migration/update/clean-machine checks and v1.0 publication.
-16. Selected extension packets and their compatibility/QA/release gates, supported by Stage 13 maintenance.
-
-This update changes planning documentation only. Application coding, dependency installation and builds remain subsequent work packets. Future publishing targets `YashwanthDevelops/Anti-Scrolling-Notch`; hooks still require configuration review and Codex's trust flow at installation time.
+This revision changes planning and repository instructions only. It does not install hooks, launch a capture, implement monitoring, change CI workflows or authorize a release. Hook installation still follows configuration review and Codex's trust flow.
 
 ## Execution ledger
 
-Keep the authoritative progress record in `docs/execution-ledger.md` alongside this plan. Each milestone records client date, task IDs, outcome, checks, commit/branch and push evidence. The initial entry must distinguish source/documentation import from successful application build; Stages 2–13 stay pending until their acceptance evidence exists.
+Keep the authoritative progress record in `docs/execution-ledger.md` alongside this plan. Each milestone records client date, task IDs, outcome, checks, branch and publication evidence when available. Update its record at meaningful checkpoints; historical records stay intact. Do not add a commit solely to record the preceding commit's hash. Source/documentation import, prototype progress and production capability acceptance remain distinct.
 
-Track scope at task + profile + packet level. Tasks spanning MVP/v1 (for example SHELL-08, GH-04 and STATUS-05) need separate sub-status/evidence rather than a premature whole-task checkmark. Record QA/REL results per release version. Deferred extensions remain deferred; they do not make a released core profile incomplete or count as implemented functionality.
+Track scope at task + profile + milestone level, retaining historical packet references. Tasks spanning MVP/v1 (for example SHELL-08, GH-04 and STATUS-05) need separate sub-status/evidence rather than a premature whole-task checkmark. Record QA/REL results per release version. Deferred extensions remain deferred; they do not make a released core profile incomplete or count as implemented functionality.
 
-The root workspace copy of this plan is a convenience mirror. After import, update the repository copy first and synchronize the root copy, so the published GitHub plan remains authoritative.
+The root workspace copy of this plan is a convenience mirror. Update the repository copy first and synchronize the root copy, rebasing its relative document links to `app/docs/`, so the published GitHub plan remains authoritative.
 
 ## Scope tracking against the Coucou audit
 
@@ -600,4 +606,4 @@ Use the checklist against a declared scope/version. MVP may pass its rows while 
 - [ ] Interactive v1: its Stage 11 QA and Stage 12 delivery gates pass, release blockers are closed and v1.0 is published.
 - [ ] Selected extensions: separately verified capabilities and delivery gates pass before their functionality ships.
 
-Stage 2 was integrated in merge commit `965376b39af1d0351fe479778dbfa5a1f637070b` after the project owner accepted BASE-05 based on the source audit, existing launch evidence and direct manual verification of the app UI/interactions. This runtime verification was owner-reported, not independently automated; no independent fixed-DPI capture or runtime motion measurement is claimed. Stage 3 packet 1's four-event Codex CLI observer adapter was integrated by merge commit `553e03ef70848df672cbc0fad9efb753de62ae6c`. Packet 2 verifies the generic stable Codex app activation route on Windows 11 build 26200 / OpenAI.Codex 26.928.2636.0; it does not verify session/chat deep links or hook-derived project paths. Packet 3 records the bounded Windows probe outcomes; toast delivery/activation and independent Explorer-to-WebView2 transport remain runtime-unverified, while mixed-DPI movement was unavailable on this one-display host. Packet 4 completes COMPAT-09's release-profile evidence matrix and fixture inventory. Packet 5 enforces a backend-owned, exact-version capability registry and freshness gate; only generic Codex app activation is eligible, and unverified monitor/interactions remain disabled. Packet 6 pins the installed CLI release's hook schema inventory, generates the four captured event discriminators from its version-matched schemas, and verifies neutral replay and absent-app fallback for each captured event. Tool, compaction, subagent, interrupt and Desktop hook delivery remain runtime-unverified and disabled. The Stage 5 reducer plus Stage 6 UI/session workflows remain pending; keep unsupported capabilities disabled and continue one bounded packet at a time. All implementation commits and pushes belong to your Anti-Scrolling-Notch repository.
+Stage 2 was integrated in merge commit `965376b39af1d0351fe479778dbfa5a1f637070b` after the project owner accepted BASE-05 based on the source audit, existing launch evidence and direct manual verification of the app UI/interactions. This runtime verification was owner-reported, not independently automated; no independent fixed-DPI capture or runtime motion measurement is claimed. Stage 3 packet 1's four-event Codex CLI observer adapter was integrated by merge commit `553e03ef70848df672cbc0fad9efb753de62ae6c`. Packet 2 verifies the generic stable Codex app activation route on Windows 11 build 26200 / OpenAI.Codex 26.928.2636.0; it does not verify session/chat deep links or hook-derived project paths. Packet 3 records the bounded Windows probe outcomes; toast delivery/activation and independent Explorer-to-WebView2 transport remain runtime-unverified, while mixed-DPI movement was unavailable on this one-display host. Packet 4 completes COMPAT-09's release-profile evidence matrix and fixture inventory. Packet 5 enforces a backend-owned, exact-version capability registry and freshness gate; only generic Codex app activation is eligible, and unverified monitor/interactions remain disabled. Packet 6 pins the installed CLI release's hook schema inventory, generates the four captured event discriminators from its version-matched schemas, and verifies neutral replay and absent-app fallback for each captured event. Tool, compaction, subagent, interrupt and Desktop hook delivery remain runtime-unverified and disabled. The Stage 5 reducer/replay/storage foundation and MON-02 installer are now integrated; residual backend requirements and Stage 6 session-aware workflows remain pending under M1. Keep unsupported capabilities disabled and deliver the remaining work through the milestone workflow above. All implementation commits and pushes belong to your Anti-Scrolling-Notch repository.
