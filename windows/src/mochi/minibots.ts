@@ -3,7 +3,16 @@
 
 import { BotEngine, hexToRGB } from "./engine";
 import { Motion } from "../core/motion";
-import type { AgentTask } from "../core/state";
+import type { BotEmoteName, BotStateName } from "../core/layout";
+import type { EyeShape } from "./engine";
+
+export interface MiniBotPresentation {
+  id: string;
+  color: string;
+  state: BotStateName;
+  emote?: BotEmoteName | null;
+  miniEye?: EyeShape | null;
+}
 
 interface MiniBot {
   canvas: HTMLCanvasElement;
@@ -23,7 +32,7 @@ const live = new Map<HTMLCanvasElement, MiniBot>();
  * `.frame(width: 22)`. Sizing the canvas itself to `bodySize` would shrink the
  * whole drawing to 60 %, which is what used to happen.
  */
-export function createMiniBot(task: AgentTask, bodySize: number): HTMLElement {
+export function createMiniBot(task: MiniBotPresentation, bodySize: number): HTMLElement {
   const slot = document.createElement("span");
   slot.className = "mini";
   slot.style.width = `${bodySize}px`;
@@ -65,7 +74,7 @@ export function pruneMiniBots() {
   }
 }
 
-export function syncMiniBotStates(tasks: AgentTask[]) {
+export function syncMiniBotStates(tasks: readonly MiniBotPresentation[]) {
   for (const mb of live.values()) {
     const task = tasks.find((t) => t.id === mb.taskId);
     if (!task) continue;

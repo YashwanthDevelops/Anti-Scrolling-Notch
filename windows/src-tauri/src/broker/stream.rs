@@ -194,6 +194,20 @@ impl BrokerStream {
         self.sequence
     }
 
+    /// Establish a persisted cursor after startup recovery. Historical events
+    /// are already reflected in state and are deliberately not replayed into
+    /// the new process's bounded notification window.
+    pub(crate) fn advance_after_recovery(&mut self, high_water: u64) {
+        self.sequence = self.sequence.max(high_water);
+        self.replay.clear();
+        self.seen_source_events = DeduplicationWindow::new(self.replay_capacity);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_sequence_for_test(&mut self, sequence: u64) {
+        self.sequence = sequence;
+    }
+
     pub fn state(&self) -> &BrokerState {
         &self.state
     }
@@ -356,8 +370,8 @@ mod tests {
     use super::*;
     use crate::broker::reducer::{BrokerUpdate, SessionStatePatch};
     use crate::broker::types::{
-        ConnectionHealth, DOMAIN_SCHEMA_VERSION, OpaqueId, RequestKind, RequestLifecycle,
-        SessionActivity, SessionLifecycle, SourceScopedId, WaitingState,
+        ConnectionHealth, OpaqueId, RequestKind, RequestLifecycle, SessionActivity,
+        SessionLifecycle, SourceScopedId, WaitingState, DOMAIN_SCHEMA_VERSION,
     };
 
     fn id(value: &str) -> OpaqueId {

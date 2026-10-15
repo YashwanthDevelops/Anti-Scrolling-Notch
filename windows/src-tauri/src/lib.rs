@@ -2,18 +2,31 @@
 
 pub mod broker;
 mod capabilities;
+// Legacy model preference compatibility; no Claude chat adapter is active.
+#[allow(dead_code)]
 mod claude;
 mod codex_hooks;
+pub mod codex_monitor;
 mod codex_navigation;
 mod codex_pipe;
 mod files;
+pub mod github;
+// Shared installer helpers and relay extraction are active; the inherited
+// Claude installer is retained only as reference and its IPC commands reject.
+#[allow(dead_code)]
 mod hooks;
 mod identity;
+#[cfg(test)]
+#[allow(dead_code)]
 mod integrations;
 mod island;
 mod log;
+pub mod notifications;
+#[cfg(test)]
+#[allow(dead_code)]
 mod pipe;
 mod private_pipe;
+pub mod repositories;
 mod secrets;
 mod settings;
 pub mod storage;
@@ -23,7 +36,7 @@ mod win_user;
 use std::os::windows::process::CommandExt;
 use std::process::Command;
 use std::str::FromStr;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
@@ -35,7 +48,6 @@ use codex_hooks::CodexHookStatus;
 use files::DroppedFile;
 use hooks::{HookPreview, HookStatus};
 use island::{PollGate, ScreenInfo};
-use pipe::Pending;
 use settings::Settings;
 
 /// Keeps spawned helpers from flashing a console window.
@@ -45,6 +57,10 @@ pub struct Shared {
     pub settings: Mutex<Settings>,
     pub history: Mutex<Option<storage::HistoryStore>>,
     pub broker: broker::service::BrokerService,
+    pub monitor: codex_monitor::CodexMonitor,
+    pub github: github::GithubService,
+    pub paused: AtomicBool,
+    pub notifications: Mutex<notifications::NotificationService>,
     pub gate: Arc<PollGate>,
     shortcut_status: Mutex<ShortcutStatus>,
 }
@@ -58,6 +74,91 @@ fn broker_sync(
         .broker
         .synchronize_after(after_sequence)
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn codex_monitor_status(shared: State<Shared>) -> codex_monitor::CodexMonitorStatus {
+    shared.monitor.status()
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HistoryPage {
+    records: Vec<storage::HistoryRecord>,
+    next_after_id: Option<i64>,
+    has_more: bool,
+}
+
+/// Read minimized history off the UI thread, using a bounded local row cursor.
+#[tauri::command]
+async fn broker_history(
+    app: AppHandle,
+    after_id: Option<i64>,
+    limit: usize,
+) -> Result<HistoryPage, String> {
+    let after_id = after_id.unwrap_or(0);
+    if after_id < 0 {
+        return Err("History cursor must not be negative.".into());
+    }
+    let limit = limit.clamp(1, 100);
+    tauri::async_runtime::spawn_blocking(move || {
+        let shared = app.state::<Shared>();
+        let history = shared
+            .history
+            .lock()
+            .map_err(|_| "History is unavailable.")?;
+        let history = history.as_ref().ok_or("History is unavailable.")?;
+        let mut records = history
+            .records_after(after_id, limit + 1)
+            .map_err(|_| "History could not be read.")?;
+        let has_more = records.len() > limit;
+        records.truncate(limit);
+        Ok(HistoryPage {
+            next_after_id: records.last().map(|record| record.id),
+            records,
+            has_more,
+        })
+    })
+    .await
+    .map_err(|_| "History worker is unavailable.".to_string())?
+}
+
+/// GitHub account access is opt-in for the explicitly selected local checkout.
+#[tauri::command]
+async fn github_snapshot(
+    app: AppHandle,
+    shared: State<'_, Shared>,
+    repo_path: String,
+    use_gh: bool,
+    force: Option<bool>,
+) -> Result<github::GithubSnapshot, String> {
+    if use_gh && shared.paused.load(Ordering::Relaxed) {
+        return Err("GitHub monitoring is paused. Resume it before refreshing.".into());
+    }
+    let snapshot = shared
+        .github
+        .refresh(
+            repo_path,
+            github::RefreshOptions {
+                use_gh,
+                force: force.unwrap_or(false),
+            },
+        )
+        .await?;
+    let observed_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
+        .unwrap_or_default();
+    for update in github::broker_updates(&snapshot) {
+        publish_broker_update(&app, &shared, update, observed_at, None, None)?;
+    }
+    publish_github_notification_policy(&app, &shared, &snapshot, observed_at);
+    if use_gh && snapshot.health == github::GithubHealth::Ready {
+        shared
+            .github
+            .start_scheduler(app, snapshot.repository.canonical_path.clone())?;
+    }
+    Ok(snapshot)
 }
 
 /// Publish an adapter-normalized broker update and notify the view store.
@@ -84,7 +185,50 @@ pub fn publish_broker_update(
         app.emit("broker-sync", notification)
             .map_err(|error| format!("could not notify the frontend broker view store: {error}"))?;
     }
+    publish_notification_policy(app, shared, observed_at_unix_ms);
     Ok(receipt)
+}
+
+fn notification_preferences(shared: &Shared) -> notifications::NotificationPreferences {
+    let sound_enabled = shared
+        .settings
+        .lock()
+        .map(|settings| settings.sound_enabled)
+        .unwrap_or(false);
+    notifications::NotificationPreferences {
+        paused: shared.paused.load(Ordering::Relaxed),
+        quiet: !sound_enabled,
+        fullscreen: notifications::foreground_window_is_fullscreen(),
+        sound_enabled,
+        ..Default::default()
+    }
+}
+
+/// Notifications consume backend state; a badge or sound never resolves a request.
+pub fn publish_notification_policy(app: &AppHandle, shared: &Shared, observed_at_unix_ms: u64) {
+    let Ok(broker::stream::BrokerSyncResponse::Snapshot { snapshot }) =
+        shared.broker.synchronize_after(0)
+    else {
+        return;
+    };
+    let preferences = notification_preferences(shared);
+    if let Ok(mut service) = shared.notifications.lock() {
+        let update = service.process_snapshot(&snapshot, observed_at_unix_ms, preferences);
+        let _ = app.emit_to(island::WINDOW_LABEL, "notification-policy", update);
+    }
+}
+
+pub fn publish_github_notification_policy(
+    app: &AppHandle,
+    shared: &Shared,
+    snapshot: &github::GithubSnapshot,
+    observed_at_unix_ms: u64,
+) {
+    let preferences = notification_preferences(shared);
+    if let Ok(mut service) = shared.notifications.lock() {
+        let update = service.process_github_snapshot(snapshot, observed_at_unix_ms, preferences);
+        let _ = app.emit_to(island::WINDOW_LABEL, "notification-policy", update);
+    }
 }
 
 #[derive(Clone, Default, Serialize)]
@@ -109,8 +253,9 @@ pub struct BootInfo {
 #[tauri::command]
 fn boot(app: AppHandle, shared: State<Shared>) -> BootInfo {
     let mut settings = shared.settings.lock().unwrap().clone();
-    // The real state of ~/.claude/settings.json wins over whatever we stored.
-    settings.hooks_installed = hooks::status().installed;
+    // Legacy Claude integration is inactive in the Codex development profile.
+    settings.hooks_installed = false;
+    settings.active_integrations.clear();
     let screen = island::screen_info(&app, &settings.screen);
     let monitors = island::monitor_options(&app);
     let shortcut_status = shared.shortcut_status.lock().unwrap().clone();
@@ -379,49 +524,55 @@ fn quit_app(app: AppHandle) {
 /// Tray → Pause. Paused means paused: the pollers stop talking to the network,
 /// not just the island stopping showing things.
 #[tauri::command]
-fn set_paused(paused: bool) {
-    integrations::set_paused(paused);
+fn set_paused(shared: State<Shared>, paused: bool) {
+    shared.paused.store(paused, Ordering::Relaxed);
 }
 
 // ── Claude Code hooks ─────────────────────────────────────────────────────────
 
 #[tauri::command]
-fn hooks_status() -> HookStatus {
-    hooks::status()
+fn hooks_status() -> Result<HookStatus, String> {
+    Err("Claude hooks are inactive in the Codex profile.".into())
 }
 
 /// Returns the diff the user has to look at before anything is written.
 #[tauri::command]
 fn hooks_preview(install: bool) -> Result<HookPreview, String> {
-    hooks::preview(install)
+    let _ = install;
+    Err("Claude hook installation is inactive. Use the Codex CLI hook settings.".into())
 }
 
 /// Only ever called from an explicit click in the settings window.
 #[tauri::command]
-fn hooks_apply(
-    app: AppHandle,
-    shared: State<Shared>,
-    install: bool,
-    fingerprint: String,
-) -> Result<String, String> {
-    // The fingerprint comes from the preview the user actually looked at, so a
-    // settings.json that changed in between is refused rather than overwritten.
-    let backup = hooks::write(install, &fingerprint)?;
-    let updated = {
-        let mut current = shared.settings.lock().unwrap();
-        current.hooks_installed = install;
-        let _ = settings::save(&current);
-        current.clone()
-    };
-    let _ = app.emit("settings-changed", updated);
-    Ok(backup)
+fn hooks_apply(install: bool, fingerprint: String) -> Result<String, String> {
+    let _ = (install, fingerprint);
+    Err("Claude hook installation is inactive. Use the Codex CLI hook settings.".into())
 }
 
 // ── Codex CLI hook configuration ─────────────────────────────────────────────
 
 #[tauri::command]
-fn codex_hooks_status() -> Result<CodexHookStatus, String> {
-    codex_hooks::status()
+fn codex_hooks_status(shared: State<Shared>) -> Result<CodexHookStatus, String> {
+    match codex_hooks::status() {
+        Ok(status) => {
+            shared.monitor.set_hook_readiness(
+                status.cli_version.clone(),
+                status.cli_supported,
+                status.configured_events.clone(),
+                status.hook_ready,
+            );
+            Ok(status)
+        }
+        Err(error) => {
+            // A failed refresh must clear stale installation evidence. This
+            // reports file/runtime readiness only; `/hooks` trust remains a
+            // separate, user-controlled state.
+            shared
+                .monitor
+                .set_hook_readiness(None, false, Vec::new(), false);
+            Err(error)
+        }
+    }
 }
 
 /// Returns the exact user-level hooks.json diff before any write occurs.
@@ -437,23 +588,26 @@ fn codex_hooks_apply(install: bool, fingerprint: String, backup: String) -> Resu
 }
 
 #[tauri::command]
-fn approval_decision(app: AppHandle, request_id: String, decision: String) {
-    pipe::answer(&app, &request_id, &decision);
+fn approval_decision(request_id: String, decision: String) -> Result<(), String> {
+    let _ = (request_id, decision);
+    Err("Companion approval replies are unavailable. Continue in Codex.".into())
 }
 
 /// The island has the card on screen, so the long wait for a human may begin.
 /// Until this arrives the relay only waits a few hundred milliseconds, which is
 /// what stops a paused or unresponsive island from freezing Claude Code.
 #[tauri::command]
-fn approval_ack(app: AppHandle, request_id: String) {
-    pipe::acknowledge(&app, &request_id);
+fn approval_ack(request_id: String) -> Result<(), String> {
+    let _ = request_id;
+    Err("Companion approval replies are unavailable. Continue in Codex.".into())
 }
 
 /// Nobody can act on this request — the island is paused, or another card is
 /// already up. Claude Code falls back to asking in the terminal immediately.
 #[tauri::command]
-fn approval_decline(app: AppHandle, request_id: String) {
-    pipe::decline(&app, &request_id);
+fn approval_decline(request_id: String) -> Result<(), String> {
+    let _ = request_id;
+    Err("Companion approval replies are unavailable. Continue in Codex.".into())
 }
 
 // ── Chat, files and secrets ───────────────────────────────────────────────────
@@ -488,16 +642,15 @@ fn secret_clear(key: String) -> Result<(), String> {
 
 /// Opens the configured n8n instance — the URL lives in the Credential Manager.
 #[tauri::command]
-fn open_n8n() {
-    if let Some(url) = secrets::get("n8n-url") {
-        open_url(url);
-    }
+fn open_n8n() -> Result<(), String> {
+    Err("The n8n extension is deferred.".into())
 }
 
 /// Refresh buttons in the integration cards.
 #[tauri::command]
-async fn refresh_integration(app: AppHandle, id: String) {
-    integrations::poll_once(app, &id).await;
+async fn refresh_integration(id: String) -> Result<(), String> {
+    let _ = id;
+    Err("Service extensions are deferred. Use the GitHub workflow settings.".into())
 }
 
 /// Lets the island write to the same log as the Rust side.
@@ -582,6 +735,15 @@ pub fn run() {
             None
         }
     };
+    let broker = broker::service::BrokerService::default();
+    let monitor = codex_monitor::CodexMonitor::default();
+    if let Some(history) = history.as_ref() {
+        if monitor.recover_history(history, &broker).is_err() {
+            log::line(
+                "Saved Codex observations could not be restored; live monitoring remains gated.",
+            );
+        }
+    }
     let gate = Arc::new(PollGate::new());
 
     tauri::Builder::default()
@@ -605,13 +767,19 @@ pub fn run() {
         .manage(Shared {
             settings: Mutex::new(loaded.clone()),
             history: Mutex::new(history),
-            broker: broker::service::BrokerService::default(),
+            broker,
+            monitor,
+            github: github::GithubService::default(),
+            paused: AtomicBool::new(false),
+            notifications: Mutex::new(notifications::NotificationService::default()),
             gate: gate.clone(),
             shortcut_status: Mutex::new(ShortcutStatus::default()),
         })
-        .manage(Pending::default())
         .invoke_handler(tauri::generate_handler![
             broker_sync,
+            broker_history,
+            codex_monitor_status,
+            github_snapshot,
             boot,
             save_settings,
             monitor_options,
@@ -682,9 +850,9 @@ pub fn run() {
                 env!("CARGO_PKG_VERSION")
             ));
             hooks::ensure_hook_exe(&handle);
-            pipe::start(handle.clone());
             codex_pipe::start(handle.clone());
-            integrations::start(handle.clone());
+            // Deferred services and the inherited Claude decision listener stay
+            // inactive. GitHub access requires explicit repository/account opt-in.
             Ok(())
         })
         .run(tauri::generate_context!())

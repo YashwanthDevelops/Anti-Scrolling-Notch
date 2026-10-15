@@ -15,6 +15,9 @@ import {
 } from "../core/layout";
 import { Sound } from "../core/sound";
 import { State } from "../core/state";
+import { CodexPresentation } from "../core/codex-presentation";
+import { escapeBlursIslandTextEntry, isIslandTextEntryFocused, type IslandTextEntry } from "../core/text-entry-focus";
+import { projectNotificationPresentation, type NotificationUpdate } from "../core/notification-policy";
 import { BotEngine, hexToRGB } from "../mochi/engine";
 import { Greeting } from "../mochi/greeting";
 import { createMiniBot, pruneMiniBots, setMiniBotsReducedMotion, syncMiniBotStates, tickMiniBots } from "../mochi/minibots";
@@ -107,6 +110,10 @@ export class Island {
       this.dirty = true;
       this.ensureRunning();
     });
+    CodexPresentation.subscribe(() => {
+      this.dirty = true;
+      this.ensureRunning();
+    });
   }
 
   // ── DOM ─────────────────────────────────────────────────────────────────────
@@ -171,6 +178,7 @@ export class Island {
         State.notify();
       },
       openSettingsWindow: () => this.runBridgeAction(Bridge.openSettingsWindow(), "Could not open Settings."),
+      openCodex: () => this.runBridgeAction(Bridge.openCodex(), "Could not open Codex."),
       runBridgeAction: (operation, message) => this.runBridgeAction(operation, message),
       blip: () => Sound.play("blip"),
     };
@@ -197,7 +205,7 @@ export class Island {
           : null;
         this.setView("prompt");
       },
-      cancel: () => this.setView(State.defaultView()),
+      cancel: () => this.setView(this.defaultView()),
     });
 
     this.clipEl = h(
@@ -241,11 +249,16 @@ export class Island {
           if (from === "coucou") this.greeting.interrupt();
           else if (from === "hidden") Sound.play("peek");
           this.setMode("compact");
-          if (from === "coucou") State.view = State.pendingApproval ? "approval" : State.defaultView();
+          // A user can navigate away while the launch greeting is still active.
+          // Only restore the default view when the greeting itself owned the view;
+          // otherwise preserve that explicit selection for the next expansion.
+          if (from === "coucou" && State.view === "greeting") {
+            State.view = State.pendingApproval ? "approval" : this.defaultView();
+          }
           if (!this.wasInIsland) this.fsm.mouseLeft();
           break;
         case "home":
-          this.expand(State.pendingApproval ? "approval" : State.defaultView());
+          this.expand(State.pendingApproval ? "approval" : this.defaultView());
           if (!this.wasInIsland) this.fsm.mouseLeft();
           break;
         case "coucou":
@@ -259,6 +272,10 @@ export class Island {
 
   launch() {
     this.fsm.launch();
+  }
+
+  defaultView(): IslandViewName {
+    return CodexPresentation.sessions.length > 0 ? "overview" : State.defaultView();
   }
 
   // ── Mode / view ─────────────────────────────────────────────────────────────
@@ -356,6 +373,23 @@ export class Island {
     this.alert("note");
   }
 
+  /** Apply backend notification policy as a non-authoritative island hint. */
+  applyNotificationUpdate(update: NotificationUpdate) {
+    const presentation = projectNotificationPresentation(update, State.settings.soundEnabled);
+    this.header.setNotificationBadge?.(presentation.badgeCount, presentation.label, presentation.priority);
+    this.views.get("history")?.setNotificationUpdate?.(update);
+    if (update.suppressed || !presentation.reveal) return;
+
+    // Reveal only the compact shell. Never steal focus, change the selected view,
+    // or interrupt text entry, a drag, or an already-presented actionable card.
+    if (!State.pendingApproval && !this.interactionActive && State.mode === "hidden") {
+      this.fsm.reveal();
+    }
+    if (!State.pendingApproval && !this.interactionActive && presentation.sound) {
+      Sound.play(presentation.sound);
+    }
+  }
+
   private async decideApproval(requestId: string, decision: "allow" | "deny") {
     try {
       await Bridge.approvalDecision(requestId, decision);
@@ -377,7 +411,7 @@ export class Island {
     this.setPinned(false);
     State.updateTask("integration_claude", "working");
     State.setPillBadge("integration_claude", null);
-    this.setView(State.defaultView());
+    this.setView(this.defaultView());
   }
 
   reveal() {
@@ -449,7 +483,7 @@ export class Island {
         const path = e.paths?.[0];
         if (!path) {
           this.engine.animateMorph(0);
-          this.setView(State.defaultView());
+          this.setView(this.defaultView());
           return;
         }
         this.swallow(path);
@@ -489,7 +523,7 @@ export class Island {
       this.clearDragPresentation();
       UploadSeq.deactivate();
       if (!State.pendingApproval && State.mode === "expanded" && UPLOAD_VIEWS.has(State.view)) {
-        this.setView(State.defaultView());
+        this.setView(this.defaultView());
       }
       this.endFileDrag();
     }, 180);
@@ -497,9 +531,14 @@ export class Island {
 
   private syncInteraction() {
     const prompt = this.views?.get("prompt")?.el;
+    const history = this.views?.get("history")?.el;
     const input = prompt?.querySelector("input.chat-input");
-    const typing = State.view === "prompt" && document.hasFocus() &&
-      document.activeElement === input;
+    const pathInput = history?.querySelector("input.github-path");
+    const activeElement = document.activeElement;
+    const activeEntry: IslandTextEntry = activeElement === input
+      ? "chat"
+      : activeElement === pathInput ? "github-path" : null;
+    const typing = isIslandTextEntryFocused(State.view, activeEntry, document.hasFocus());
     if (typing !== this.textFocusActive) {
       this.textFocusActive = typing;
       void handleBridgeCall(Bridge.focusWindow(typing), "window focus");
@@ -557,7 +596,7 @@ export class Island {
         this.engine.animateMorph(0);
         this.setView("note");
         Sound.play("error");
-        window.setTimeout(() => this.setView(State.defaultView()), 2400);
+        window.setTimeout(() => this.setView(this.defaultView()), 2400);
       });
   }
 
@@ -679,7 +718,10 @@ export class Island {
     this.islandEl.addEventListener("mousedown", (e) => {
       Sound.resume();
       State.lastActivity = performance.now();
-      if (State.view === "prompt" && e.target instanceof Element && e.target.closest(".chat-input")) {
+      if (e.target instanceof Element && (
+        (State.view === "prompt" && e.target.closest(".chat-input")) ||
+        (State.view === "history" && e.target.closest(".github-path"))
+      )) {
         void handleBridgeCall(Bridge.focusWindow(true), "window focus");
       }
       if (State.mode !== "expanded") {
@@ -693,6 +735,17 @@ export class Island {
     });
 
     window.addEventListener("keydown", (e) => {
+      const historyPath = this.views?.get("history")?.el.querySelector<HTMLInputElement>("input.github-path");
+      if (escapeBlursIslandTextEntry(
+        e.key,
+        State.view,
+        document.activeElement === historyPath ? "github-path" : null,
+      )) {
+        e.preventDefault();
+        historyPath?.blur();
+        this.syncInteraction();
+        return;
+      }
       if (e.key === "Escape" && State.mode === "expanded" && !State.isPinned && !State.pendingApproval) this.collapse();
       State.lastActivity = performance.now();
     });
@@ -807,9 +860,9 @@ export class Island {
     this.confusedRecovery = window.setTimeout(() => {
       this.confusedRecovery = null;
       State.stateOverride = null;
-      this.engine.setState(State.effectiveState);
+      this.engine.setState(this.presentationBotState());
       if (State.view === "confused") {
-        const fallback = State.defaultView();
+        const fallback = this.defaultView();
         this.setView(this.prevViewBeforeConfused === "confused" ? fallback : this.prevViewBeforeConfused);
       }
       this.engine.triggerEmote("happy");
@@ -909,14 +962,14 @@ export class Island {
 
     if (State.mode === "expanded" && State.view !== "uploading" && !greetingActive && !this.uploadActive) {
       const d = p.diameter;
-      const color = botGlowColor(State.effectiveState);
+      const color = botGlowColor(this.presentationBotState());
       this.botGlow.style.display = "block";
       this.botGlow.style.width = `${d * 2.2}px`;
       this.botGlow.style.height = `${d * 2.2}px`;
       this.botGlow.style.left = `${this.botCx.value - d * 1.1}px`;
       this.botGlow.style.top = `${this.botCy.value - d * 1.1}px`;
       this.botGlow.style.background = `radial-gradient(circle, ${color} 0%, transparent 62%)`;
-      this.botGlow.style.opacity = String(botGlowOpacity(State.effectiveState));
+      this.botGlow.style.opacity = String(botGlowOpacity(this.presentationBotState()));
     } else {
       this.botGlow.style.display = "none";
     }
@@ -941,7 +994,10 @@ export class Island {
     if (!ctx) return;
 
     const focus = State.focusTask;
-    this.engine.bodyColor = focus?.isIntegration ? hexToRGB(focus.color) : null;
+    const codexSession = focus ? null : CodexPresentation.selectedAvatar();
+    this.engine.bodyColor = focus?.isIntegration
+      ? hexToRGB(focus.color)
+      : codexSession ? hexToRGB(codexSession.color) : null;
     this.engine.particleOverhang = BOT_OVERHANG;
     this.engine.lookX = this.lookX();
     this.engine.lookY = this.lookY();
@@ -997,6 +1053,10 @@ export class Island {
     for (const [name, view] of this.views) {
       const on = name === State.view;
       view.el.classList.toggle("on", on);
+      // Opacity and pointer-events only hide a view visually. Make inactive
+      // legacy/deferred cards unavailable to keyboard and assistive technology.
+      view.el.inert = !on;
+      view.el.setAttribute("aria-hidden", String(!on));
       if (on) view.sync();
     }
 
@@ -1018,20 +1078,29 @@ export class Island {
     const showGrid = State.mode === "compact";
     this.miniGrid.style.opacity = showGrid ? "1" : "0";
     if (showGrid) {
-      const others = State.otherTasks.slice(0, 4);
-      const key = others.map((t) => t.id).join("|");
+      const others = State.focusTask
+        ? State.otherTasks.slice(0, 4).map((task) => ({ id: task.id, color: task.color, state: task.state, emote: task.emote, miniEye: task.miniEye }))
+        : CodexPresentation.otherAvatars(4).map((session) => ({ id: session.key, color: session.color, state: session.state }));
+      const key = others.map((item) => `${item.id}:${item.state}`).join("|");
       if (this.miniGrid.dataset.key !== key) {
         this.miniGrid.dataset.key = key;
         this.miniGrid.replaceChildren();
-        for (const t of others) {
-          this.miniGrid.append(createMiniBot(t, 13));
+        for (const item of others) {
+          this.miniGrid.append(createMiniBot(item, 13));
         }
         pruneMiniBots();
       }
     }
 
-    syncMiniBotStates(State.tasks);
-    this.engine.setState(State.effectiveState);
+    const miniModels = State.focusTask
+      ? State.tasks
+      : CodexPresentation.avatars().map((session) => ({ id: session.key, color: session.color, state: session.state }));
+    syncMiniBotStates(miniModels);
+    this.engine.setState(this.presentationBotState());
+  }
+
+  private presentationBotState() {
+    return State.focusTask ? State.effectiveState : CodexPresentation.selectedAvatar()?.state ?? State.effectiveState;
   }
 
   /** Applies settings coming from Rust at boot. */

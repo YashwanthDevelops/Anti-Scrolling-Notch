@@ -12,7 +12,7 @@ $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $pipeName = "anti-scrolling-notch-codex-$sid"
 $utf8 = [System.Text.UTF8Encoding]::new($false)
 $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
-$projectionPath = Join-Path $repoRoot 'tests\compat\codex-hooks\captured-projections.jsonl'
+$projectionPath = Join-Path $repoRoot 'tests\compat\codex-hooks\captured-identities-cli-0.157.1.jsonl'
 if (-not (Test-Path -LiteralPath $projectionPath -PathType Leaf)) {
     throw "Sanitized loopback capture projection not found: $projectionPath"
 }
@@ -46,7 +46,14 @@ function Assert-NeutralExit($Process) {
 $cases = @(Get-Content -LiteralPath $projectionPath | Where-Object { $_.Trim() } | ForEach-Object {
     $projection = $_ | ConvertFrom-Json
     if (-not $projection.hook_event_name) { throw 'Capture projection has no event name.' }
-    @{ Name = $projection.hook_event_name; Payload = $_ }
+    # The accepted capture is a sanitized recorder envelope. Turn only its
+    # captured identity values into the root-level input fields from the pinned
+    # Codex hook schema; do not treat the wrapper's `identities` object as a
+    # Codex input schema.
+    $input = [ordered]@{ hook_event_name = $projection.hook_event_name }
+    if ($projection.identities.session_id) { $input.session_id = $projection.identities.session_id }
+    if ($projection.identities.turn_id) { $input.turn_id = $projection.identities.turn_id }
+    @{ Name = $projection.hook_event_name; Input = $input | ConvertTo-Json -Compress }
 })
 if ($cases.Count -ne 4) {
     throw "Expected the four loopback-captured event projections; found $($cases.Count)."
@@ -62,19 +69,27 @@ foreach ($case in $cases) {
     )
     try {
         $connect = $server.WaitForConnectionAsync()
-        $process = Start-HookProcess $case.Payload
+        $process = Start-HookProcess $case.Input
         if (-not $connect.Wait(5000)) { throw "No transport connection for $($case.Name)." }
         $reader = [System.IO.StreamReader]::new($server, $utf8, $false, 1024, $true)
         $line = $reader.ReadLine()
         Assert-NeutralExit $process
         $message = $line | ConvertFrom-Json
-        if ($message.wire_version -ne 1 -or $message.event -ne $case.Name) {
+        if ($message.wire_version -ne 2 -or $message.event -ne $case.Name) {
             throw "Unexpected internal message for $($case.Name): $line"
         }
-        $allowed = @('wire_version', 'event')
+        $expected = @('wire_version', 'event')
+        if ($case.Input -match '"session_id"') { $expected += 'session_id' }
+        if ($case.Input -match '"turn_id"') { $expected += 'turn_id' }
+        if ($message.session_id -ne $(if ($case.Input -match '"session_id":"([^"]+)"') { $Matches[1] } else { $null })) {
+            throw "Session identity was not preserved exactly for $($case.Name): $line"
+        }
+        if ($message.turn_id -ne $(if ($case.Input -match '"turn_id":"([^"]+)"') { $Matches[1] } else { $null })) {
+            throw "Turn identity was not preserved exactly for $($case.Name): $line"
+        }
         $actual = @($message.PSObject.Properties.Name)
         $actualNames = ($actual | Sort-Object) -join ','
-        $allowedNames = ($allowed | Sort-Object) -join ','
+        $allowedNames = ($expected | Sort-Object) -join ','
         if ($actualNames -cne $allowedNames) {
             throw "Unexpected data crossed the Codex adapter boundary: $line"
         }
@@ -98,6 +113,8 @@ $negativeCases = @(
     @{ Name = 'unverified SubagentStop'; Payload = '{"hook_event_name":"SubagentStop"}' },
     @{ Name = 'unverified Interrupt'; Payload = '{"hook_event_name":"Interrupt"}' },
     @{ Name = 'unverified PermissionRequest'; Payload = '{"hook_event_name":"PermissionRequest"}' },
+    @{ Name = 'malformed session id'; Payload = '{"hook_event_name":"SessionStart","session_id":""}' },
+    @{ Name = 'unsupported turn id'; Payload = '{"hook_event_name":"SessionStart","session_id":"s","turn_id":"t"}' },
     @{ Name = 'malformed JSON'; Payload = 'not-json' }
 )
 foreach ($case in $negativeCases) {
@@ -130,7 +147,7 @@ if ($existingPipe) {
 else {
     foreach ($case in $cases) {
         $clock = [System.Diagnostics.Stopwatch]::StartNew()
-        $process = Start-HookProcess $case.Payload
+        $process = Start-HookProcess $case.Input
         Assert-NeutralExit $process
         $clock.Stop()
         if ($clock.ElapsedMilliseconds -gt 1800) {

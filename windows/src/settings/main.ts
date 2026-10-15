@@ -586,6 +586,12 @@ function integrationsSection(present: Record<string, boolean | null>): HTMLEleme
   return h("section", {}, h("h2", {}, h("span", { text: "Integrations" })), note, list);
 }
 
+// Kept as dormant legacy source for the deferred Claude/service integrations;
+// the settings window renders only Codex hook setup and general shell settings.
+void claudeSection;
+void apiSection;
+void integrationsSection;
+
 // ── General section ───────────────────────────────────────────────────────────
 
 function generalSection(): HTMLElement {
@@ -768,14 +774,6 @@ async function main() {
     monitors = boot.monitors;
     shortcutStatus = boot.shortcutStatus;
   }
-  let status: HookStatus | null = null;
-  try {
-    status = await Bridge.hooksStatus();
-  } catch (error) {
-    readFailure = true;
-    reportBridgeFailure(error, "hook status startup");
-  }
-
   let codexStatus: CodexHookStatus | null = null;
   try {
     codexStatus = await Bridge.codexHooksStatus();
@@ -784,37 +782,11 @@ async function main() {
     reportBridgeFailure(error, "Codex hook status startup");
   }
 
-  let hasKey: boolean | null = null;
-  try {
-    hasKey = await Bridge.secretPresent("anthropic-api-key");
-  } catch (error) {
-    readFailure = true;
-    reportBridgeFailure(error, "chat credential startup status");
-  }
-
-  const keys = [
-    "stripe-api-key", "github-token", "vercel-token",
-    "n8n-url", "n8n-api-key", "resend-api-key", "notion-api-key", "calcom-api-key",
-  ];
-  const present: Record<string, boolean | null> = {};
-  for (const k of keys) {
-    try {
-      present[k] = await Bridge.secretPresent(k);
-    } catch (error) {
-      readFailure = true;
-      present[k] = null;
-      reportBridgeFailure(error, "integration credential startup status");
-    }
-  }
-
   clear(root);
   root.append(
     h("h1", {}, h("span", { text: "Anti-Scrolling-Notch" }), h("span", { class: "version", text: version })),
     pageNotice,
-    claudeSection(status),
     codexHooksSection(codexStatus),
-    apiSection(hasKey),
-    integrationsSection(present),
     generalSection(),
     h("div", {
       class: "hint",

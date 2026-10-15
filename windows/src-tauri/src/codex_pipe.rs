@@ -11,7 +11,9 @@ use std::os::windows::io::AsRawHandle;
 use std::sync::Arc;
 use std::time::Duration;
 
-use codex_hook_contract::{parse_wire_message, CodexHookObservation, MAX_WIRE_BYTES};
+use codex_hook_contract::{
+    parse_wire_lifecycle_message, CodexHookLifecycleObservation, MAX_WIRE_BYTES,
+};
 use tauri::{AppHandle, Manager};
 use tokio::io::AsyncReadExt;
 use tokio::net::windows::named_pipe::NamedPipeServer;
@@ -33,6 +35,9 @@ pub fn start(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let Some(sid) = crate::win_user::current_user_sid() else {
             log::line("Codex observer disabled: could not resolve current-user SID");
+            app.state::<crate::Shared>()
+                .monitor
+                .set_observer_state(crate::codex_monitor::ObserverState::Offline, None);
             return;
         };
         let name = pipe_name_for_sid(&sid);
@@ -42,9 +47,17 @@ pub fn start(app: AppHandle) {
                 // In particular, first_pipe_instance rejects a pipe already
                 // owned by another process. Never attach to an existing name.
                 log::line(format!("cannot open private Codex observer pipe: {err}"));
+                app.state::<crate::Shared>().monitor.set_observer_state(
+                    crate::codex_monitor::ObserverState::Offline,
+                    Some(err.to_string()),
+                );
                 return;
             }
         };
+
+        app.state::<crate::Shared>()
+            .monitor
+            .set_observer_state(crate::codex_monitor::ObserverState::Listening, None);
 
         let permits = Arc::new(Semaphore::new(MAX_ACTIVE_CLIENTS));
         for server in listeners {
@@ -80,9 +93,16 @@ async fn accept_loop(
         if let Err(err) = server.connect().await {
             let _ = server.disconnect();
             log::line(format!("Codex observer listener reconnecting: {err}"));
+            app.state::<crate::Shared>().monitor.set_observer_state(
+                crate::codex_monitor::ObserverState::Degraded,
+                Some(err.to_string()),
+            );
             tokio::time::sleep(LISTENER_RETRY).await;
             continue;
         }
+        app.state::<crate::Shared>()
+            .monitor
+            .set_observer_state(crate::codex_monitor::ObserverState::Listening, None);
 
         let Some(permit) = acquire_client_permit(&permits) else {
             // Saturation is neutral: drop this best-effort observer event and
@@ -97,6 +117,10 @@ async fn accept_loop(
                 // Keep this listener instance and recover after a short delay;
                 // the connected event is deliberately dropped on this path.
                 log::line(format!("Codex observer listener recovering: {err}"));
+                app.state::<crate::Shared>().monitor.set_observer_state(
+                    crate::codex_monitor::ObserverState::Degraded,
+                    Some(err.to_string()),
+                );
                 let _ = server.disconnect();
                 drop(permit);
                 tokio::time::sleep(LISTENER_RETRY).await;
@@ -113,20 +137,15 @@ async fn accept_loop(
                     let app = app.clone();
                     let result = tauri::async_runtime::spawn_blocking(move || {
                         let shared = app.state::<crate::Shared>();
-                        let mut history = shared
-                            .history
-                            .lock()
-                            .unwrap_or_else(std::sync::PoisonError::into_inner);
-                        if let Some(history) = history.as_mut() {
-                            history.record_hook_observation(observation, observed_at)?;
-                        }
-                        Ok::<(), crate::storage::HistoryError>(())
+                        shared
+                            .monitor
+                            .apply(&app, &shared, observation, observed_at)
                     })
                     .await;
                     match result {
-                        Ok(Ok(())) => {}
+                        Ok(Ok(_)) => {}
                         Ok(Err(error)) => {
-                            log::line(format!("Codex hook history append failed: {error}"));
+                            log::line(format!("Codex lifecycle processing failed: {error}"));
                         }
                         Err(error) => {
                             log::line(format!("Codex hook history worker failed: {error}"));
@@ -150,7 +169,7 @@ fn acquire_client_permit(permits: &Arc<Semaphore>) -> Option<OwnedSemaphorePermi
     Arc::clone(permits).try_acquire_owned().ok()
 }
 
-async fn receive(mut pipe: NamedPipeServer) -> Option<CodexHookObservation> {
+async fn receive(mut pipe: NamedPipeServer) -> Option<CodexHookLifecycleObservation> {
     // Read only a tiny framed message before checking the client identity.
     // Impersonation is based on the last message read, and no payload is
     // parsed, logged or acted on until the SID has been verified.
@@ -162,7 +181,7 @@ async fn receive(mut pipe: NamedPipeServer) -> Option<CodexHookObservation> {
     )) {
         return None;
     }
-    parse_wire_message(&bytes).ok()
+    parse_wire_lifecycle_message(&bytes).ok()
 }
 
 async fn read_message(pipe: &mut NamedPipeServer) -> Option<Vec<u8>> {
@@ -198,7 +217,7 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::Instant;
 
-    use codex_hook_contract::{CodexHookEvent, CodexHookObservation};
+    use codex_hook_contract::{parse_wire_message, CodexHookEvent, CodexHookObservation};
     use tokio::io::AsyncWriteExt;
     use tokio::net::windows::named_pipe::ClientOptions;
     use windows::core::{PCWSTR, PWSTR};
@@ -308,7 +327,7 @@ mod tests {
         .map_err(|error| io::Error::other(error.to_string()))?
     }
 
-    async fn exchange(sid: &str, bytes: &[u8]) -> Option<CodexHookObservation> {
+    async fn exchange(sid: &str, bytes: &[u8]) -> Option<CodexHookLifecycleObservation> {
         let name = test_pipe_name(sid);
         let server = create_server(&name, sid, true).unwrap();
         let receiver = tokio::spawn(async move {

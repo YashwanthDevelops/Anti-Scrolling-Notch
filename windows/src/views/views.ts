@@ -12,6 +12,9 @@ import { createMiniBot, pruneMiniBots } from "../mochi/minibots";
 import { buildPrompt } from "./chat";
 import { buildChoose, buildUpload, buildUploading } from "./upload";
 import { integrationHealth, renderIntegrationCard, type IntegrationCardHooks } from "./integrations";
+import { buildMonitorView } from "./monitor";
+import { buildGithubWorkflowCard } from "./github-workflow";
+import { CodexPresentation, type CodexSessionPresentation } from "../core/codex-presentation";
 
 export interface ViewActions {
   setView(v: IslandViewName): void;
@@ -26,6 +29,7 @@ export interface ViewActions {
   setVolume(v: number): void;
   setAutoClose(seconds: number): void;
   openSettingsWindow(): void;
+  openCodex(): void;
   runBridgeAction<T>(operation: Promise<T>, failureMessage: string): void;
   blip(): void;
 }
@@ -37,6 +41,8 @@ export interface ViewHost {
   focus?(): void;
   /** Called every frame while the view is on screen. */
   tick?(nowMs: number): void;
+  setNotificationBadge?(count: number, label: string, priority: import("../core/notification-policy").NotificationPriority): void;
+  setNotificationUpdate?(update: import("../core/notification-policy").NotificationUpdate): void;
 }
 
 // ── Shared pieces ─────────────────────────────────────────────────────────────
@@ -80,38 +86,71 @@ function stack(padLeft: number, padRight: number, ...children: Node[]): HTMLElem
 // ── Header ────────────────────────────────────────────────────────────────────
 
 export function buildHeader(actions: ViewActions): ViewHost {
-  const tabHome = h("button", { class: "tab", title: "Overview", onclick: () => go("overview") }, svg(ICONS.house, 13));
-  const tabChat = h("button", { class: "tab", title: "Ask", onclick: () => go("prompt") }, svg(ICONS.bubble, 13));
-  const tabDrop = h("button", { class: "tab", title: "Drop", onclick: () => go("upload") }, svg(ICONS.plus, 13));
+  const tabHome = h("button", { class: "tab", title: "Overview", "aria-label": "Overview", onclick: () => go("overview") }, svg(ICONS.house, 13));
+  const tabChat = h("button", { class: "tab", title: "Ask Codex", "aria-label": "Open Codex", onclick: () => go("prompt") }, svg(ICONS.bubble, 13));
+  const tabDrop = h("button", { class: "tab", title: "Drop a file", "aria-label": "Open Codex to attach a file", onclick: () => go("upload") }, svg(ICONS.plus, 13));
+  const historyBadge = h("span", { class: "tab-notification-badge", "aria-hidden": "true" });
+  let badgeTimer: number | null = null;
+  let badgeLabel = "Codex activity and history";
+  const tabHistory = h("button", { class: "tab", title: badgeLabel, "aria-label": badgeLabel, onclick: () => {
+    setNotificationBadge(0, "Codex activity and history", "idle");
+    go("history");
+  } }, svg(ICONS.doc, 13), historyBadge);
+
+  function setNotificationBadge(count: number, label: string, priority: import("../core/notification-policy").NotificationPriority) {
+    if (badgeTimer != null) window.clearTimeout(badgeTimer);
+    badgeTimer = null;
+    badgeLabel = count > 0 ? `${label}; ${count} new item${count === 1 ? "" : "s"}` : "Codex activity and history";
+    historyBadge.textContent = count > 9 ? "9+" : count > 0 ? String(count) : "";
+    historyBadge.style.display = count > 0 ? "grid" : "none";
+    historyBadge.dataset.priority = count > 0 ? priority : "idle";
+    tabHistory.title = badgeLabel;
+    tabHistory.setAttribute("aria-label", badgeLabel);
+    if (count > 0) badgeTimer = window.setTimeout(() => setNotificationBadge(0, "Codex activity and history", "idle"), 15_000);
+  }
 
   const gearBtn = h("button", { title: "Settings", onclick: () => go("settings") }, svg(ICONS.gear, 14));
   const soundBtn = h("button", { title: "Mute", onclick: () => actions.toggleSound() }, svg(ICONS.speakerOn, 14));
 
   function go(v: IslandViewName) {
     actions.blip();
+    if (v === "prompt" && !capabilityRequestGeneration(State.capabilities, "codex.managedSession")) {
+      actions.openCodex();
+      return;
+    }
+    if (v === "upload" && !capabilityRequestGeneration(State.capabilities, "codex.attachmentDelivery")) {
+      actions.openCodex();
+      return;
+    }
     actions.setView(v);
   }
 
   const el = h(
     "div",
     { id: "header" },
-    h("div", { class: "tabs" }, tabHome, tabChat, tabDrop),
+    h("div", { class: "tabs" }, tabHome, tabChat, tabDrop, tabHistory),
     h("div", { class: "header-actions" }, gearBtn, soundBtn),
   );
 
   return {
     el,
+    setNotificationBadge(count: number, label: string, priority: import("../core/notification-policy").NotificationPriority) { setNotificationBadge(count, label, priority); },
     sync() {
       const v = State.view;
       tabHome.classList.toggle("on", v === "overview" || v === "empty");
       tabChat.classList.toggle("on", v === "prompt");
       tabDrop.classList.toggle("on", v === "upload");
+      tabHistory.classList.toggle("on", v === "history");
       tabChat.title = capabilityRequestGeneration(State.capabilities, "codex.managedSession")
         ? "Ask Codex"
         : "Companion chat is unavailable. Continue in Codex.";
       tabDrop.title = capabilityRequestGeneration(State.capabilities, "codex.attachmentDelivery")
         ? "Drop a file"
-        : "File delivery is unavailable. Attach files in Codex.";
+        : "File delivery is unavailable. Open Codex to attach files.";
+      const chatAvailable = capabilityRequestGeneration(State.capabilities, "codex.managedSession") !== null;
+      const attachmentAvailable = capabilityRequestGeneration(State.capabilities, "codex.attachmentDelivery") !== null;
+      if (!chatAvailable) tabChat.title = "Companion chat is unavailable. Open Codex instead.";
+      if (!attachmentAvailable) tabDrop.title = "Attachment delivery is unavailable. Open Codex to attach files.";
       gearBtn.classList.toggle("on", v === "settings");
       clear(gearBtn);
       gearBtn.append(svg(v === "settings" ? ICONS.gearFill : ICONS.gear, 14));
@@ -131,7 +170,7 @@ function buildOverview(actions: ViewActions): ViewHost {
   const leftBody = h("div", { class: "left-body" });
   const jump = h(
     "button",
-    { class: "icon-btn jump", title: "Open", onclick: () => actions.openTarget() },
+    { class: "icon-btn jump", title: "Open Codex", "aria-label": "Open Codex", onclick: () => State.focusTask ? actions.openTarget() : actions.openCodex() },
     svg(ICONS.arrowUpRight, 8),
   );
   const left = card(null, leftBody, jump);
@@ -174,8 +213,10 @@ function buildOverview(actions: ViewActions): ViewHost {
     },
     sync() {
       const task = State.focusTask;
-      if (task?.id !== lastFocus) {
-        lastFocus = task?.id ?? null;
+      const codexSession = task ? null : CodexPresentation.selectedAvatar();
+      const focusKey = task?.id ?? codexSession?.key ?? null;
+      if (focusKey !== lastFocus) {
+        lastFocus = focusKey;
         detailOpen = false;
         cardKey = "";
         mode = null;
@@ -220,17 +261,65 @@ function buildOverview(actions: ViewActions): ViewHost {
           clear(leftBody);
           leftBody.append(renderIntegrationCard(task, hooks));
         }
+      } else if (codexSession) {
+        const key = `codex-session:${codexSession.key}:${codexSession.state}:${codexSession.description}`;
+        if (key !== cardKey) {
+          cardKey = key;
+          mode = "card";
+          clear(leftBody);
+          leftBody.append(
+            h("div", { class: "card-body" },
+              h("div", { class: "who" }, dot(codexSession.color, 7), h("span", { class: "name", text: codexSession.title }), h("span", { class: "tool", text: "Codex CLI" })),
+              h("div", { class: "monitor-overview-summary", text: codexSession.description }),
+              h("button", { class: "link-btn monitor-overview-link", text: "Activity and history…", onclick: () => actions.setView("history") }),
+            ),
+          );
+        }
+      } else {
+        const key = "codex-monitor:empty";
+        if (key !== cardKey) {
+          cardKey = key;
+          mode = "card";
+          clear(leftBody);
+          leftBody.append(
+            h("div", { class: "card-body" },
+              h("div", { class: "who" }, dot("#A78BFA", 7), h("span", { class: "name", text: "Codex sessions" })),
+              h("div", { class: "monitor-overview-summary", text: "No Codex sessions observed yet." }),
+              h("button", { class: "link-btn monitor-overview-link", text: "Activity and history…", onclick: () => actions.setView("history") }),
+            ),
+          );
+        }
       }
 
       jump.style.display = detailOpen ? "none" : "";
 
-      const others = State.otherTasks.slice(0, 4);
-      const pillKey = others.map((t) => `${t.id}:${t.pillBadge ?? ""}`).join("|");
-      if (pillKey !== pillIds) {
-        pillIds = pillKey;
-        clear(pills);
-        for (const t of others) pills.append(buildPill(t, actions));
-        pruneMiniBots();
+      if (task) {
+        const others = State.otherTasks.slice(0, 4);
+        const pillKey = others.map((t) => `${t.id}:${t.pillBadge ?? ""}`).join("|");
+        if (pillKey !== pillIds) {
+          pillIds = pillKey;
+          clear(pills);
+          for (const t of others) pills.append(buildPill(t, actions));
+          pruneMiniBots();
+        }
+      } else {
+        const others = CodexPresentation.otherAvatars(4);
+        const pillKey = `${CodexPresentation.selectedKey ?? "none"}:` + others.map((session) => `${session.key}:${session.state}`).join("|")
+          + `:overflow-${CodexPresentation.overflowCount}`;
+        if (pillKey !== pillIds) {
+          pillIds = pillKey;
+          clear(pills);
+          for (const session of others) pills.append(buildSessionPill(session));
+          if (CodexPresentation.overflowCount > 0) {
+            pills.append(h("button", {
+              class: "pill session-overflow",
+              text: `+${CodexPresentation.overflowCount} more`,
+              "aria-label": `${CodexPresentation.overflowCount} more Codex sessions; open activity history`,
+              onclick: () => actions.setView("history"),
+            }));
+          }
+          pruneMiniBots();
+        }
       }
     },
   };
@@ -270,6 +359,37 @@ function buildPill(task: AgentTask, actions: ViewActions): HTMLElement {
   return pill;
 }
 
+function buildSessionPill(session: CodexSessionPresentation): HTMLElement {
+  const canvas = createMiniBot({ id: session.key, color: session.color, state: session.state }, 24);
+  const pill = h(
+    "button",
+    {
+      class: "pill",
+      type: "button",
+      title: session.description,
+      "aria-label": `Select ${session.title}. ${session.description}`,
+      "aria-pressed": CodexPresentation.selectedKey === session.key ? "true" : "false",
+      onclick: () => CodexPresentation.select(session.key),
+    },
+    canvas,
+    h("span", { class: "lbl", text: session.title }),
+  );
+  pill.style.borderColor = `${session.color}24`;
+  pill.addEventListener("mouseenter", () => {
+    pill.style.background = `${session.color}2e`;
+    pill.style.borderColor = `${session.color}8c`;
+    pill.style.boxShadow = `0 2px 10px ${session.color}59`;
+    (pill.querySelector(".lbl") as HTMLElement).style.color = lighten(session.color, 0.3);
+  });
+  pill.addEventListener("mouseleave", () => {
+    pill.style.background = "";
+    pill.style.borderColor = `${session.color}24`;
+    pill.style.boxShadow = "";
+    (pill.querySelector(".lbl") as HTMLElement).style.color = "";
+  });
+  return pill;
+}
+
 function lighten(hex: string, amount: number): string {
   const v = parseInt(hex.replace("#", ""), 16);
   const c = [(v >> 16) & 255, (v >> 8) & 255, v & 255].map((x) =>
@@ -288,10 +408,10 @@ function buildEmpty(actions: ViewActions): ViewHost {
       "div",
       { style: "display:flex;flex-direction:column;gap:5px" },
       h("div", { class: "title", text: "Nothing running right now." }),
-      h("div", { class: "sub", text: "Drop a file or window, or ask me anything." }),
+      h("div", { class: "sub", text: "Open Codex to start a session or attach files." }),
     ),
     h("div", { class: "grow" }),
-    btn("Ask Claude", "primary", () => actions.setView("prompt")),
+    btn("Continue in Codex", "primary", () => actions.openCodex()),
   );
   return { el: h("div", { class: "view" }, card(null, body)), sync() {} };
 }
@@ -502,6 +622,9 @@ export function buildViews(
 ): Map<IslandViewName, ViewHost> {
   const map = new Map<IslandViewName, ViewHost>();
   map.set("overview", buildOverview(actions));
+  const monitor = buildMonitorView(actions);
+  monitor.el.append(buildGithubWorkflowCard());
+  map.set("history", monitor);
   map.set("empty", buildEmpty(actions));
   map.set("approval", buildApproval(actions));
   map.set("question", buildQuestion());

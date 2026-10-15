@@ -139,6 +139,9 @@ jobs:
       - name: Test frontend broker view-store synchronization
         run: npm run test:view-store
 
+      - name: Test monitor, GitHub and notification UI projections
+        run: npm run test:monitor
+
       - name: Test frontend architecture boundaries
         run: npm run test:architecture
 

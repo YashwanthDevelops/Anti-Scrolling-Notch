@@ -10,6 +10,7 @@ use std::time::Duration;
 
 use codex_hook_contract::CodexHookObservation;
 use rusqlite::{params, Connection, OpenFlags, Transaction};
+use serde::Serialize;
 
 use crate::broker::reducer::BrokerUpdate;
 use crate::broker::types::EventEnvelope;
@@ -36,6 +37,7 @@ pub enum HistoryError {
     InvalidCursor,
     InvalidHookWireVersion(u8),
     InvalidStoredSequence,
+    EmptyBatch,
 }
 
 impl std::fmt::Display for HistoryError {
@@ -64,6 +66,7 @@ impl std::fmt::Display for HistoryError {
             Self::InvalidStoredSequence => {
                 formatter.write_str("history database contains an invalid source sequence")
             }
+            Self::EmptyBatch => formatter.write_str("cannot record an empty normalized event batch"),
         }
     }
 }
@@ -89,7 +92,8 @@ impl From<std::io::Error> for HistoryError {
 }
 
 /// A local database row. `id` is a storage cursor, not a source event ID.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HistoryRecord {
     pub id: i64,
     pub observed_at_unix_ms: u64,
@@ -176,21 +180,71 @@ impl HistoryStore {
         event: &EventEnvelope<BrokerUpdate>,
         retain_content: bool,
     ) -> Result<i64, HistoryError> {
-        let mut event = event.clone();
-        sanitize_broker_update(&mut event.payload, retain_content);
-        let source = serde_json::to_value(event.source)?
-            .as_str()
-            .unwrap_or("unknown")
-            .to_owned();
-        let json = serde_json::to_string(&event)?;
-        self.insert_record(
-            event.observed_at_unix_ms,
-            &source,
-            BROKER_UPDATE_KIND,
-            Some(event.sequence.get()),
-            &json,
-            retain_content,
-        )
+        self.record_broker_events(std::slice::from_ref(event), retain_content)?
+            .into_iter()
+            .next()
+            .ok_or(HistoryError::EmptyBatch)
+    }
+
+    /// Persist one normalized broker observation atomically, so a session and
+    /// its turn cannot be split across history by a bounded-storage failure.
+    pub fn record_broker_events(
+        &mut self,
+        events: &[EventEnvelope<BrokerUpdate>],
+        retain_content: bool,
+    ) -> Result<Vec<i64>, HistoryError> {
+        if events.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut rows = Vec::with_capacity(events.len());
+        for event in events {
+            let mut event = event.clone();
+            sanitize_broker_update(&mut event.payload, retain_content);
+            let source = serde_json::to_value(event.source)?
+                .as_str()
+                .unwrap_or("unknown")
+                .to_owned();
+            let json = serde_json::to_string(&event)?;
+            if json.len() > MAX_HISTORY_RECORD_BYTES {
+                return Err(HistoryError::RecordTooLarge { bytes: json.len() });
+            }
+            rows.push((
+                i64::try_from(event.observed_at_unix_ms)
+                    .map_err(|_| HistoryError::TimestampOutOfRange)?,
+                source,
+                event.sequence.get().to_be_bytes().to_vec(),
+                json,
+            ));
+        }
+
+        let transaction = self
+            .connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let mut ids = Vec::with_capacity(rows.len());
+        for (observed_at, source, sequence, json) in rows {
+            prune_history(
+                &transaction,
+                MAX_HISTORY_EVENTS,
+                MAX_HISTORY_PAYLOAD_BYTES,
+                json.len(),
+            )?;
+            transaction.execute(
+                "INSERT INTO history_events
+                 (observed_at_unix_ms, source, record_kind, source_sequence, record_json, content_retained)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    observed_at,
+                    source,
+                    BROKER_UPDATE_KIND,
+                    sequence,
+                    json,
+                    i64::from(retain_content)
+                ],
+            )?;
+            ids.push(transaction.last_insert_rowid());
+        }
+        transaction.commit()?;
+        Ok(ids)
     }
 
     /// Read records after a local row cursor, oldest first. The page size is
@@ -591,6 +645,41 @@ mod tests {
         assert!(!turn_with_content
             .to_string()
             .contains("sk-ant-private-value"));
+        drop(store);
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn normalized_session_and_turn_history_batch_is_persisted_together() {
+        let path = test_path("normalized-batch");
+        let mut store = HistoryStore::open(&path).unwrap();
+        let first = event(BrokerUpdate::UpsertSession(session()), 20);
+        let mut turn = crate::broker::types::Turn {
+            schema_version: SchemaVersion::current(),
+            identity: SourceScopedId::new(
+                SourceKind::CodexCliObserver,
+                crate::broker::types::OpaqueId::new("turn-1").unwrap(),
+            ),
+            session_id: session().identity,
+            thread_id: None,
+            agent_id: None,
+            lifecycle: crate::broker::types::TurnLifecycle::Active,
+            outcome: crate::broker::types::TurnOutcome::Unknown,
+            started_at_unix_ms: Some(1_021),
+            ended_at_unix_ms: None,
+            summary: None,
+            plan: None,
+        };
+        turn.summary = Some("must be stripped".into());
+        let second = event(BrokerUpdate::UpsertTurn(turn), 21);
+        let ids = store.record_broker_events(&[first, second], false).unwrap();
+        let rows = store.records_after(0, 10).unwrap();
+        assert_eq!(ids, rows.iter().map(|row| row.id).collect::<Vec<_>>());
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].record_kind, BROKER_UPDATE_KIND);
+        assert_eq!(rows[0].source_sequence, Some(20));
+        assert_eq!(rows[1].source_sequence, Some(21));
+        assert!(!rows[1].record_json.contains("must be stripped"));
         drop(store);
         std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
     }

@@ -88,17 +88,19 @@ impl CapabilityRegistry {
         }];
 
         capabilities.extend([
-            disabled(CapabilityDefinition {
-                id: "codex.cliLifecycleMonitor",
-                surface: "Codex CLI observing hooks",
-                supported_version: Some("0.157.1"),
-                transport: "Hook stdin projection → versioned user named pipe",
-                evidence: "Four event names were captured at the CLI boundary; fixture/replay evidence is not a live production monitor binding.",
-                test_reference: "tests/compat/codex-hooks/captured-projections.jsonl; windows/codex-hook-contract/src/lib.rs",
-                failure_behavior: "Reject unknown event discriminators and malformed internal messages without a Codex decision.",
-                fallback: "Use Codex directly; generic Open Codex activation is available only when its exact package is verified.",
-                disabled_reason: "No production hook-install context or Stage 5/6 monitor pipeline exists; wire version 1 does not identify the running CLI version.",
-            }),
+            CapabilityEntry {
+                id: "codex.cliLifecycleMonitor".into(),
+                surface: "Codex CLI observing hooks".into(),
+                supported_version: Some("0.157.1".into()),
+                transport: "Hook stdin identity projection → versioned current-user named pipe".into(),
+                evidence: "The pinned CLI 0.157.1 schemas and one captured session/turn fixture support this experimental adapter; hook invocation version, registration, and cross-session ID uniqueness remain unverified.".into(),
+                test_reference: "tests/compat/codex-hooks/captured-identities-cli-0.157.1.jsonl; windows/codex-hook-contract/src/lib.rs; windows/src-tauri/src/codex_monitor.rs".into(),
+                failure_behavior: "Reject unsupported events, malformed IDs, unknown wire fields, and versions; without trusted runtime evidence, retain only anonymous history.".into(),
+                fallback: "Use Codex directly; generic Open Codex activation is available only when its exact package is verified.".into(),
+                adapter_available: true,
+                enabled: false,
+                disabled_reason: Some("The pipe cannot prove that each hook sender runs CLI 0.157.1 with the supported registration; cross-session identity uniqueness also lacks evidence.".into()),
+            },
             disabled(CapabilityDefinition {
                 id: "codex.desktopSessionMonitor",
                 surface: "Codex Desktop session monitoring",

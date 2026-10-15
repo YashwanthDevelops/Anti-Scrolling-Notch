@@ -1,14 +1,14 @@
 //! Deterministic, in-memory reduction of normalized backend records.
 //!
-//! This is an internal state contract, not a Codex hook event schema. The
-//! captured hook observation is anonymous and is deliberately not translated
-//! into a session, turn, tool or request here. Sequence ordering, replay,
-//! persistence, deduplication keys, timers and request resolution belong to
-//! later Stage 5 tasks.
+//! This is an internal state contract, not a Codex hook event schema. A
+//! separately gated adapter may normalize the captured session/turn identity
+//! slice into these records; this reducer never reads raw hook input. Sequence
+//! ordering, replay, persistence, deduplication keys, timers and request
+//! resolution remain separate concerns.
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::types::{
     ConnectionHealth, Integration, OpaqueId, PendingRequest, Repository, RequestLifecycle,
@@ -26,7 +26,7 @@ pub enum ApplyOutcome {
 
 /// Independent session-state axes. `None` means leave that axis untouched;
 /// `Some(Unknown)` explicitly resets it to unknown.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionStatePatch {
     pub identity: SourceScopedId,
@@ -62,8 +62,13 @@ impl SessionStatePatch {
 
 /// Internal normalized state mutations. These variants do not describe
 /// upstream Codex events and are not exposed over Tauri IPC.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(
+    tag = "kind",
+    content = "value",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
 pub enum BrokerUpdate {
     UpsertSession(Session),
     PatchSessionState(SessionStatePatch),

@@ -22,7 +22,9 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use anti_scrolling_notch_runtime_identity::{APP_PIPE_PREFIX, CODEX_PIPE_PREFIX};
-use codex_hook_contract::{parse_hook_payload, CodexHookObservation, MAX_HOOK_INPUT_BYTES};
+use codex_hook_contract::{
+    parse_hook_lifecycle_payload, CodexHookLifecycleObservation, MAX_HOOK_INPUT_BYTES,
+};
 
 /// Budget for getting a pipe connection. Beyond this Claude Code wins, always.
 const CONNECT_TIMEOUT: Duration = Duration::from_millis(300);
@@ -152,13 +154,13 @@ fn run_codex_observer() {
     {
         return;
     }
-    let Ok(observation) = parse_hook_payload(&raw) else {
+    let Ok(observation) = parse_hook_lifecycle_payload(&raw) else {
         return;
     };
     send_codex_observation(observation);
 }
 
-fn send_codex_observation(observation: CodexHookObservation) {
+fn send_codex_observation(observation: CodexHookLifecycleObservation) {
     let Some(pipe_path) = codex_pipe_path() else {
         return;
     };

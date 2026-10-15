@@ -45,6 +45,17 @@ export const Bridge = {
   /** Fetch an authoritative backend snapshot or contiguous replay. */
   syncBroker: (intent: BrokerSyncIntent) => syncBroker(intent),
 
+  /** Read the observer's actual runtime/readiness status. */
+  codexMonitorStatus: () => callOrThrow<CodexMonitorStatus>("codex_monitor_status"),
+
+  /** Read persisted broker-observation metadata without granting frontend authority. */
+  brokerHistory: (afterId: number | null, limit: number) =>
+    callOrThrow<BrokerHistoryPage>("broker_history", { afterId, limit }),
+
+  /** Local repository projection and opt-in GitHub CLI refresh. */
+  githubSnapshot: (repoPath: string, useGh: boolean, force = false) =>
+    callOrThrow<GithubSnapshot>("github_snapshot", { repoPath, useGh, force }),
+
   saveSettings: (settings: Settings) => call<void>("save_settings", { settings }),
 
   monitorOptions: () => call<MonitorOption[]>("monitor_options"),
@@ -185,6 +196,91 @@ export interface CodexHookStatus {
   cliVersion: string | null;
   cliSupported: boolean;
   supportedCliVersion: string;
+}
+
+export interface CodexMonitorStatus {
+  schemaVersion: 2;
+  capability: string;
+  supportedCliVersion: string;
+  runtimeVersion: string | null;
+  configuredHookEvents: string[];
+  hookRegistrationVerified: boolean;
+  relayReady: boolean;
+  crossSessionIdentityVerified: boolean;
+  observerState: string;
+  lastEventAtUnixMs: number | null;
+  lastError: string | null;
+  pipelineAvailable: boolean;
+  productionEnabled: boolean;
+  historyAvailable: boolean;
+  brokerStateRecovered: boolean;
+  recoveryPartial: boolean;
+  recoveredEventCount: number;
+  capacityReached: boolean;
+  disabledReason: string | null;
+}
+
+export interface BrokerHistoryRecord {
+  id: number;
+  observedAtUnixMs: number;
+  source: string;
+  recordKind: string;
+  sourceSequence: number | null;
+  recordJson: string;
+  contentRetained: boolean;
+}
+
+export interface BrokerHistoryPage {
+  records: BrokerHistoryRecord[];
+  nextAfterId: number | null;
+  hasMore: boolean;
+}
+
+export type GithubHealth =
+  | "ready" | "ghUnavailable" | "unauthenticated" | "offline" | "rateLimited"
+  | "permissionDenied" | "error" | "notConnected";
+
+export interface GithubSnapshot {
+  repository: {
+    canonicalPath: string;
+    commonDir: string;
+    worktreeDir: string;
+    branch: string;
+    headSha: string;
+    remoteName: string;
+    remoteUrl: string;
+    owner: string;
+    name: string;
+    repositoryId?: string | null;
+    worktreeId?: string | null;
+  };
+  pullRequest: {
+    number: number;
+    title: string;
+    state: string;
+    isDraft: boolean;
+    url: string;
+    headOwner: string;
+    headRepo: string;
+    headRef: string;
+    headSha: string;
+    baseRef: string;
+    reviewDecision: string | null;
+    headMatches: boolean;
+  } | null;
+  checks: Array<{
+    id: string;
+    name: string;
+    kind: string;
+    status: string;
+    conclusion: string | null;
+    url: string | null;
+    headSha: string;
+  }>;
+  health: GithubHealth;
+  fetchedAtUnixMs: number | null;
+  stale: boolean;
+  error: string | null;
 }
 
 /** Same as `call`, but rejects when no native command runtime is available. */

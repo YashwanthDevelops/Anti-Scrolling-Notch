@@ -6,8 +6,8 @@ import { BrokerView } from "./core/view-store";
 import { Sound } from "./core/sound";
 import { State, type Settings } from "./core/state";
 import { Island } from "./island/island";
-import { registerHookHandlers } from "./island/hooks";
-import { registerIntegrationHandlers, refreshConfigured } from "./island/integrations";
+import type { NotificationUpdate } from "./core/notification-policy";
+import { CodexPresentation } from "./core/codex-presentation";
 
 async function main() {
   const root = document.getElementById("root");
@@ -30,8 +30,13 @@ async function main() {
     State.capabilities = boot.capabilities;
   }
   if (IS_TAURI) await BrokerView.start();
+  CodexPresentation.update(BrokerView.snapshot);
+  BrokerView.subscribe(() => {
+    CodexPresentation.update(BrokerView.snapshot);
+    State.notify();
+  });
+  CodexPresentation.subscribe(() => State.notify());
   island.applySettings();
-  State.loadIntegrationTasks();
 
   await onEvent<{ x: number; y: number }>("cursor", ({ x, y }) => island.onCursor(x, y));
 
@@ -66,7 +71,7 @@ async function main() {
         break;
       case "open":
         setPaused(false);
-        island.alert(State.defaultView());
+        island.alert(island.defaultView());
         break;
       case "pause":
         setPaused(!State.paused);
@@ -93,12 +98,11 @@ async function main() {
   await onEvent<Settings>("settings-changed", (s) => {
     State.settings = { ...State.settings, ...s };
     island.applySettings();
-    State.loadIntegrationTasks();
-    void refreshConfigured();
   });
 
-  registerHookHandlers(island);
-  registerIntegrationHandlers(island, boot !== null);
+  await onEvent<NotificationUpdate>("notification-policy", (update) => {
+    island.applyNotificationUpdate(update);
+  });
 
   island.launch();
   if (bootFailed) {

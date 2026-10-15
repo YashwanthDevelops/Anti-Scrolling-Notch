@@ -11,6 +11,7 @@
     "test:view-store": "node --test tests/view-store.test.mjs",
     "test:bridge-errors": "node --test tests/bridge-errors.test.mjs",
     "test:architecture": "node --test tests/architecture-boundary.test.mjs",
+    "test:monitor": "node --test --test-concurrency=1 tests/monitor-projection.test.mjs tests/codex-presentation.test.mjs tests/github-workflow-model.test.mjs tests/notification-policy.test.mjs tests/text-entry-focus.test.mjs",
     "preview": "vite preview",
     "icons": "node scripts/gen-icons.mjs",
     "tauri": "tauri",
