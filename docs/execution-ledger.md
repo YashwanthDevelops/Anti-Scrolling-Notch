@@ -450,3 +450,7 @@ Validation is selected once per coherent implementation batch, followed by combi
 M1 starts with the verified session/turn slice and its broker/history/view-store integration, alongside readiness and independent GitHub/notification/cleanup work. Earlier packet sequencing exclusions are superseded; missing tool/subagent evidence still prevents claiming those capabilities or full MON-01 completion. No task checkboxes are promoted by this policy revision. The previous checked-out main checkpoint was PR #36 merge `7c5c504`.
 
 Scope: documentation/instructions and the root convenience plan only. No product code, assets, hook configuration, dependencies or runtime state changed. Validation passed: all 13 stages and 121 task IDs/completion states preserved, root mirror synchronized with working relative links, five changed Markdown files checked for local links/fences, and `git diff --check`. Application builds/runtime tests are not applicable. Publication is verified through the revision's commit/session output; no follow-up hash-only commit or planning PR is required.
+
+## M1 shell maintenance — 12 November 2026
+
+Adapted the failed file-drop fix from [Coucou PR #696](https://github.com/Louis-CFM/coucou/pull/696). The island now clears the pending note reset when it folds or opens another view, so an older drop error cannot reopen it or replace a newer note. The TypeScript check, Vite build and all 12 shell tests passed locally.
