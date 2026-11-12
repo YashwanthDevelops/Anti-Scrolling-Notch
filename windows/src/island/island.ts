@@ -95,6 +95,7 @@ export class Island {
   /** Drop sequence bookkeeping: last tick played, and whether the ✓ has fired. */
   private uploadTens = 0;
   private uploadDone = false;
+  private dropErrorNoteTimer: number | undefined;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -277,6 +278,7 @@ export class Island {
       void handleBridgeCall(Bridge.focusWindow(false), "window focus");
     }
     if (mode !== "expanded") {
+      this.clearDropErrorNoteTimer();
       this.engine.resetMorph();
       // Nothing can be seen of the sequence once the island is shut, and leaving
       // it running would keep the frame loop awake — the island must cost
@@ -300,6 +302,7 @@ export class Island {
 
   expand(view: IslandViewName) {
     if (State.pendingApproval && view !== "approval") view = "approval";
+    this.clearDropErrorNoteTimer();
     this.stopSequenceIfLeaving(view);
     State.view = view;
     if (State.mode !== "expanded") this.setMode("expanded");
@@ -311,6 +314,7 @@ export class Island {
 
   setView(view: IslandViewName) {
     if (State.pendingApproval && view !== "approval") return;
+    this.clearDropErrorNoteTimer();
     this.stopSequenceIfLeaving(view);
     if (State.mode !== "expanded") {
       this.fsm.forceHome();
@@ -332,6 +336,12 @@ export class Island {
     // back left it thinking the island was still open, and a click on the compact
     // island then did nothing — the island could never be reopened.
     this.fsm.forcePetit();
+  }
+
+  private clearDropErrorNoteTimer() {
+    if (this.dropErrorNoteTimer === undefined) return;
+    window.clearTimeout(this.dropErrorNoteTimer);
+    this.dropErrorNoteTimer = undefined;
   }
 
   /** Alert from the hook server: open on this view. Pinned alerts never auto-close. */
@@ -557,7 +567,12 @@ export class Island {
         this.engine.animateMorph(0);
         this.setView("note");
         Sound.play("error");
-        window.setTimeout(() => this.setView(State.defaultView()), 2400);
+        this.dropErrorNoteTimer = window.setTimeout(() => {
+          this.dropErrorNoteTimer = undefined;
+          if (State.mode === "expanded" && State.view === "note") {
+            this.setView(State.defaultView());
+          }
+        }, 2400);
       });
   }
 
